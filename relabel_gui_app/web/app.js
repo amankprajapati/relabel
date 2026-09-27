@@ -5,6 +5,7 @@ let classesDirty=false;             // class list edited in the Classes dialog, 
 let clip=document.getElementById('clipsel').value;
 let frames=[], cls={}, orig={}, idx=0, selected=null, repIdx={}, edited=new Set();
 let draw=null, newN=0, newU=0, drag=null, numMode=false;
+let boxClip=null, lastNudge=null, playTimer=null;   // copied box, nudge undo coalescing, playback
 let undoStack=[], redoStack=[];
 let outName='', srcName='';         // non-destructive: saves go to outName; srcName is never written
 let autosaveTimer=null, saving=false, saveAgain=false;   // debounced autosave state
@@ -489,6 +490,9 @@ addEventListener('keydown',e=>{
   if(t==='INPUT'||t==='SELECT'||t==='TEXTAREA'||e.target.isContentEditable){
     if(e.target.id==='idinput'&&e.key==='Enter'){ e.preventDefault(); mergeTyped(); }
     if(e.target.id==='newcls'&&e.key==='Enter'){ e.preventDefault(); addClass(); }
+    if(e.key==='Escape'){ e.preventDefault(); const m=e.target.closest('.modal');   // close its dialog, or leave the field
+      if(m) ({classdlg:closeClasses,trackdlg:closeTracker,loader:closeLoader,browser:closeBrowser,helpdlg:closeHelp})[m.id]?.();
+      else e.target.blur(); }
     return;
   }
   const z=(e.key==='z'||e.key==='Z'), y=(e.key==='y'||e.key==='Y');
@@ -498,13 +502,64 @@ addEventListener('keydown',e=>{
   if(e.key==='Escape'&&document.getElementById('helpdlg').style.display==='flex'){ closeHelp(); return; }
   if(e.key==='Escape'&&document.getElementById('classdlg').style.display==='flex'){ closeClasses(); return; }
   if(e.key==='Escape'&&document.getElementById('trackdlg').style.display==='flex'){ closeTracker(); return; }
-  if(e.key==='Escape'&&selected){ deselect(); return; }   // Escape also unselects
+  if(e.key==='Escape'){ stopPlay(); if(selected) deselect(); return; }
+  if(document.querySelector('.modal[style*="flex"]')) return;   // a dialog is open: no editor shortcuts
   if(e.key==='+'||e.key==='='){ e.preventDefault(); zoomBy(1.25); return; }   // zoom in
   if(e.key==='-'||e.key==='_'){ e.preventDefault(); zoomBy(1/1.25); return; } // zoom out
   if(e.key==='0'){ e.preventDefault(); zoomReset(); return; }                 // reset zoom
   if(/^[1-9]$/.test(e.key)&&!e.ctrlKey&&!e.metaKey&&!e.altKey){ e.preventDefault(); hotkeyClass(+e.key); return; }
-  if(e.key==='ArrowLeft')step(-1); else if(e.key==='ArrowRight')step(1);
-  else if((e.key==='Delete'||e.key==='Backspace')&&selected){e.preventDefault(); e.shiftKey?deleteTrack():deleteSelected();} });
+  const k=e.key, ctrl=e.ctrlKey||e.metaKey, lk=k.length===1?k.toLowerCase():k;
+  if(ctrl&&lk==='s'){ e.preventDefault(); save(true); return; }
+  if(ctrl&&lk==='c'){ if(copySelected()) e.preventDefault(); return; }
+  if(ctrl&&lk==='v'){ e.preventDefault(); pasteBox(); return; }
+  if(ctrl&&k.startsWith('Arrow')){ e.preventDefault(); nudge(k, e.shiftKey?10:1); return; }
+  if(ctrl||e.altKey) return;                                 // leave other browser shortcuts alone
+  const keys={
+    ArrowLeft:()=>step(-1), ArrowRight:()=>step(1), p:()=>step(-1), n:()=>step(1),
+    Home:()=>go(0), End:()=>go(frames.length-1), PageUp:()=>step(-10), PageDown:()=>step(10),
+    ' ':togglePlay, Tab:()=>cycleBox(e.shiftKey?-1:1),
+    l:toggleLabels, h:toggleHide, c:openClasses, t:openTracker,
+    Delete:()=>{ if(selected) e.shiftKey?deleteTrack():deleteSelected(); },
+    Backspace:()=>{ if(selected) e.shiftKey?deleteTrack():deleteSelected(); },
+  };
+  if(lk==='Tab'&&document.activeElement!==document.body) return;   // keep Tab for focused controls
+  if(keys[lk]){ e.preventDefault(); if(k!==' ') stopPlay(); keys[lk](); } });
+
+/* ---- keyboard helpers: copy/paste, nudge, cycle, labels, playback ---- */
+function copySelected(){ const i=selectedIdx();
+  if(i<0){ if(selected) toast('The selected object has no box on this frame'); return false; }
+  const r=frames[idx].regions[i]; boxClip={tid:r.tid, box:[...r.box], cls:cls[r.tid]};
+  toast('Copied '+(isUntracked(r.tid)?cls[r.tid]+' box':shortid(r.tid))+' · Ctrl+V on another frame'); return true; }
+// paste keeps the track id, so it fills a frame where that object is missing
+function pasteBox(){ if(!boxClip){ toast('Nothing copied yet: select a box and press Ctrl+C'); return; }
+  if(isHidden()){ toast('Boxes are hidden on this frame. Press H to show them.'); return; }
+  const regs=frames[idx].regions; let tid=boxClip.tid;
+  if(isUntracked(tid)) tid='@u'+(newU++);
+  else if(regs.some(r=>r.tid===tid)){ toast(shortid(tid)+' is already on this frame'); return; }
+  pushUndo([idx]); if(!(tid in cls)) cls[tid]=boxClip.cls;
+  regs.push({tid, box:clampBox([...boxClip.box])}); edited.add(frames[idx].file);
+  selected=tid; invalidateTids(); renderList(); drawBoxes(); showSel(); refresh();
+  toast('Pasted '+(isUntracked(tid)?cls[tid]+' box':shortid(tid))); }
+function nudge(k,d){ const i=selectedIdx();
+  if(i<0){ toast(selected?'The selected object has no box on this frame':'Select a box first'); return; }
+  const b=[...frames[idx].regions[i].box];
+  if(k==='ArrowLeft')b[0]-=d; else if(k==='ArrowRight')b[0]+=d; else if(k==='ArrowUp')b[1]-=d; else b[1]+=d;
+  const now=Date.now();                                  // a burst of nudges is one undo step
+  if(!(lastNudge&&lastNudge.tid===selected&&lastNudge.ix===idx&&now-lastNudge.t<800)) pushUndo([idx]);
+  lastNudge={tid:selected, ix:idx, t:now};
+  frames[idx].regions[i].box=clampBox(b); edited.add(frames[idx].file); drawBoxes(); refresh(); }
+function cycleBox(dir){ const rs=frames[idx].regions; if(!rs.length) return;
+  let i=selectedIdx(); i=i<0?(dir>0?0:rs.length-1):(i+dir+rs.length)%rs.length; pick(rs[i].tid,false); }
+function toggleLabels(){ const on=document.getElementById('stages').classList.toggle('nolabels');
+  document.getElementById('lblbtn').classList.toggle('on',on); toast(on?'Labels hidden':'Labels shown'); }
+function stopPlay(){ if(!playTimer) return; clearInterval(playTimer); playTimer=null;
+  document.getElementById('playico').setAttribute('href','#i-play'); }
+function togglePlay(){ if(playTimer){ stopPlay(); return; }
+  if(idx>=frames.length-1) go(0);
+  playTimer=setInterval(()=>{ if(idx>=frames.length-1){ stopPlay(); return; } step(1); },
+                        1000/(+document.getElementById('fps').value||10));
+  document.getElementById('playico').setAttribute('href','#i-pause'); }
+document.getElementById('stages').addEventListener('mousedown',stopPlay);
 addEventListener('resize',()=>{ if(!drag&&!draw){ if(zoom!==1) applyZoom(); else drawBoxes(); } });
 // mouse-wheel over the image zooms, ANCHORED at the cursor (scroll up = in, down = out).
 document.getElementById('stages').addEventListener('wheel',e=>{
@@ -523,7 +578,7 @@ document.getElementById('stages').addEventListener('wheel',e=>{
 let loaderMode='single', browseTarget=null, browseFolder=false, curDir='', curParent='';
 function val(id){ return document.getElementById(id).value.trim(); }
 function openLoader(){ document.getElementById('loader').style.display='flex'; setMode(loaderMode); }
-function closeLoader(){ document.getElementById('loader').style.display='none'; }
+function closeLoader(){ document.getElementById('loader').style.display='none'; releaseFocus(); }
 function setMode(m){ loaderMode=m;
   document.getElementById('m_single').className=m==='single'?'on':'ghost';
   document.getElementById('m_compare').className=m==='compare'?'on':'ghost';
@@ -534,7 +589,7 @@ function setMode(m){ loaderMode=m;
 async function browse(target,wantFolder){ browseTarget=target; browseFolder=wantFolder;
   document.getElementById('b_usefolder').style.display=wantFolder?'inline-block':'none';
   document.getElementById('browser').style.display='flex'; await ls(val(target)||curDir||''); }
-function closeBrowser(){ document.getElementById('browser').style.display='none'; }
+function closeBrowser(){ document.getElementById('browser').style.display='none'; releaseFocus(); }
 // join a browser dir + child name. The server returns clean, OS-native paths on the next ls, so a
 // mixed "/" here is fine (Python's os.path accepts it on Windows too). For the virtual drive root the
 // entries are already absolute (e.g. "C:\"), so we navigate straight to them.
@@ -590,7 +645,9 @@ function classUsage(){ const n={}, seen=new Set();      // class -> number of ob
     const c=cls[r.tid]||'NONE'; n[c]=(n[c]||0)+1; })); return n; }
 function openClasses(){ document.getElementById('classdlg').style.display='flex'; renderClasses();
   document.getElementById('newcls').focus(); }
-function closeClasses(){ document.getElementById('classdlg').style.display='none'; }
+// a hidden dialog's input would otherwise keep focus and swallow the editor shortcuts
+function releaseFocus(){ const a=document.activeElement; if(a&&a!==document.body) a.blur(); }
+function closeClasses(){ document.getElementById('classdlg').style.display='none'; releaseFocus(); }
 function renderClasses(){ const L=document.getElementById('clslist'); if(!L)return;
   const use=classUsage();
   L.innerHTML=CLASSES.map((c,i)=>{ const n=use[c]||0;
@@ -649,7 +706,7 @@ document.getElementById('clslist').addEventListener('change',e=>{
 /* ---- tracker: link boxes into tracks with ByteTrack (runs in the local Python server) ---- */
 function openTracker(){ document.getElementById('trackdlg').style.display='flex';
   document.getElementById('trkstatus').textContent=''; }
-function closeTracker(){ document.getElementById('trackdlg').style.display='none'; }
+function closeTracker(){ document.getElementById('trackdlg').style.display='none'; releaseFocus(); }
 function num(id,d){ const v=parseFloat(document.getElementById(id).value); return isFinite(v)?v:d; }
 async function runTracker(){
   const scope=document.querySelector('input[name=trkscope]:checked').value;
@@ -717,7 +774,7 @@ function scheduleAutosave(delay){                            // debounced auto-s
                            delay==null?900:delay);
 }
 function openHelp(){ document.getElementById('helpdlg').style.display='flex'; }
-function closeHelp(){ document.getElementById('helpdlg').style.display='none'; }
+function closeHelp(){ document.getElementById('helpdlg').style.display='none'; releaseFocus(); }
 function toggleTheme(){ const r=document.documentElement;
   const next=(r.dataset.theme||'dark')==='light'?'dark':'light';          // dark is the CSS default
   r.dataset.theme=next; try{ localStorage.setItem('relabel-theme',next); }catch(e){} }

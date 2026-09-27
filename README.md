@@ -17,7 +17,10 @@ tracks with a built-in **ByteTrack** tracker that runs on your machine.
 - **Tracking built in.** Link raw detections, or boxes you drew yourself, into tracks with ByteTrack.
   Each track gets the majority class of its boxes, which also cleans up class flicker between frames.
 - **Fix track ids.** Merge two ids into one, or delete an object on one frame or on all frames.
-- **Edit boxes.** Draw, move and resize boxes, and reach a box hidden behind another with a double-click.
+- **Annotate like VIA.** Drag on the image to draw a box, click to select, drag to move, pull a corner
+  to resize. Copy a box and paste it onto frames where it is missing: it keeps its track id.
+- **Keyboard first.** Step, jump and play through frames, cycle boxes, nudge, copy/paste, set classes
+  and open every tool from the keyboard (see below, or press <kbd>?</kbd> in the app).
 - **Non-destructive.** Edits save automatically to `<name>.edited.json` next to the original. The
   original file is never written, and everything can be undone.
 - **Review tools.** Compare two versions of a project side by side and step through the frames that
@@ -99,14 +102,27 @@ The whole run is a single undo step.
 
 ## Keyboard
 
+Mouse: drag on an empty part of the image to draw a box (<kbd>Ctrl</kbd>+drag to start on top of
+another box), click a box to select it, drag it to move, drag a corner to resize, double-click to
+reach a box behind another, scroll to zoom.
+
 | Key | Action |
 | --- | --- |
-| <kbd>←</kbd> <kbd>→</kbd> | Previous / next frame |
-| <kbd>1</kbd>-<kbd>9</kbd> | Set the selected object's class (or the class for new boxes) |
+| <kbd>←</kbd> <kbd>→</kbd> or <kbd>P</kbd> <kbd>N</kbd> | Previous / next frame |
+| <kbd>Home</kbd> <kbd>End</kbd> | First / last frame |
+| <kbd>PgUp</kbd> <kbd>PgDn</kbd> | Back / forward 10 frames |
+| <kbd>Space</kbd> | Play / pause |
+| <kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd> | Select the next / previous box on this frame |
+| <kbd>1</kbd>-<kbd>9</kbd> | Set the selected object's class on every frame (nothing selected: the class for new boxes) |
+| <kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>Ctrl</kbd>+<kbd>V</kbd> | Copy the selected box / paste it on this frame with the same track id |
+| <kbd>Ctrl</kbd>+arrows | Nudge the selected box 1 px (<kbd>Shift</kbd> for 10 px) |
 | <kbd>Del</kbd> / <kbd>Shift</kbd>+<kbd>Del</kbd> | Delete the selected box on this frame / on every frame |
+| <kbd>L</kbd> / <kbd>H</kbd> | Hide labels / hide boxes on this frame |
+| <kbd>+</kbd> <kbd>-</kbd> <kbd>0</kbd> | Zoom in / out / reset |
+| <kbd>C</kbd> / <kbd>T</kbd> | Classes dialog / tracker |
+| <kbd>Ctrl</kbd>+<kbd>S</kbd> | Save now |
 | <kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd> | Undo / redo |
-| <kbd>+</kbd> <kbd>-</kbd> <kbd>0</kbd> | Zoom in / out / reset (or scroll over the image) |
-| <kbd>Esc</kbd> | Deselect or close a dialog |
+| <kbd>Esc</kbd> | Deselect, stop playback or close a dialog |
 | <kbd>?</kbd> | Help |
 
 ## Code layout

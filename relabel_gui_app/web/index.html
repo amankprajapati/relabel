@@ -21,6 +21,9 @@
   <symbol id=i-overlap viewBox="0 0 24 24"><rect x="3" y="3" width="12" height="12" rx="1"/><rect x="9" y="9" width="12" height="12" rx="1"/></symbol>
   <symbol id=i-trash viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
   <symbol id=i-x viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id=i-play viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z" fill="currentColor"/></symbol>
+  <symbol id=i-pause viewBox="0 0 24 24"><path d="M7 4h3v16H7zM14 4h3v16h-3z" fill="currentColor"/></symbol>
+  <symbol id=i-label viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="10" rx="2"/><path d="M7 12h10"/></symbol>
   <symbol id=i-search viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/></symbol>
 </svg>
 
@@ -32,8 +35,8 @@
     <button class=btn onclick=openLoader() title="Open a project, or compare two JSONs"><svg class=i><use href="#i-open"/></svg>Open</button>
   </div>
   <div class=group>
-    <button class=btn onclick=openClasses() title="Add, rename or delete classes"><svg class=i><use href="#i-tag"/></svg>Classes</button>
-    <button class=btn onclick=openTracker() title="Link boxes across frames into tracks (ByteTrack, runs locally)"><svg class=i><use href="#i-track"/></svg>Track</button>
+    <button class=btn onclick=openClasses() title="Add, rename or delete classes (C)"><svg class=i><use href="#i-tag"/></svg>Classes</button>
+    <button class=btn onclick=openTracker() title="Link boxes across frames into tracks with ByteTrack, running locally (T)"><svg class=i><use href="#i-track"/></svg>Track</button>
   </div>
   <div class="meta">
     <span id=stat></span>
@@ -44,7 +47,7 @@
   <div class=group>
     <button id=undo class="btn icon" disabled onclick=undo() title="Undo (Ctrl+Z)" aria-label=Undo><svg class=i><use href="#i-undo"/></svg></button>
     <button id=redo class="btn icon" disabled onclick=redo() title="Redo (Ctrl+Y)" aria-label=Redo><svg class=i><use href="#i-redo"/></svg></button>
-    <button id=save class="btn primary" disabled onclick="save(true)" title="Save now (edits also save automatically)"><svg class=i><use href="#i-save"/></svg>Save</button>
+    <button id=save class="btn primary" disabled onclick="save(true)" title="Save now (Ctrl+S). Edits also save automatically."><svg class=i><use href="#i-save"/></svg>Save</button>
   </div>
   <button class="btn icon" onclick=openHelp() title="Shortcuts and help (?)" aria-label=Help><svg class=i><use href="#i-help"/></svg></button>
   <button class="btn icon" onclick=toggleTheme() title="Light / dark theme" aria-label="Toggle theme"><svg class=i><use href="#i-theme"/></svg></button>
@@ -60,7 +63,8 @@
       </div>
       <span class=sep></span>
       <div class=group>
-        <button id=hidebtn class=btn onclick=toggleHide() title="Hide or show the boxes on this frame (view only)"><svg class=i><use href="#i-eye"/></svg><span class=lbl>Hide boxes</span></button>
+        <button id=hidebtn class=btn onclick=toggleHide() title="Hide or show the boxes on this frame (H)"><svg class=i><use href="#i-eye"/></svg><span class=lbl>Hide boxes</span></button>
+        <button id=lblbtn class=btn onclick=toggleLabels() title="Hide or show box labels (L)"><svg class=i><use href="#i-label"/></svg>Labels</button>
         <button id=numbtn class=btn onclick=toggleNum() title="Show class numbers instead of names">123</button>
       </div>
       <span class=sep></span>
@@ -93,9 +97,12 @@
     </div>
 
     <footer class=timeline>
-      <button class="btn icon" onclick=step(-1) title="Previous frame (Left arrow)" aria-label="Previous frame"><svg class=i><use href="#i-prev"/></svg></button>
+      <button class="btn icon" onclick=togglePlay() title="Play / pause (Space)" aria-label="Play or pause"><svg class=i><use id=playico href="#i-play"/></svg></button>
+      <select id=fps onchange="this.blur(); if(playTimer){stopPlay();togglePlay();}" title="Playback speed" aria-label="Playback speed">
+        <option value=5>5 fps</option><option value=10 selected>10 fps</option><option value=25>25 fps</option></select>
+      <button class="btn icon" onclick=step(-1) title="Previous frame (Left arrow or P)" aria-label="Previous frame"><svg class=i><use href="#i-prev"/></svg></button>
       <input type=range id=slider min=0 value=0 oninput=go(+this.value) aria-label=Frame>
-      <button class="btn icon" onclick=step(1) title="Next frame (Right arrow)" aria-label="Next frame"><svg class=i><use href="#i-next"/></svg></button>
+      <button class="btn icon" onclick=step(1) title="Next frame (Right arrow or N)" aria-label="Next frame"><svg class=i><use href="#i-next"/></svg></button>
       <span class=counter id=counter></span>
       <span id=diffnav class=nav style="display:none">
         <span class=sep></span>
@@ -208,27 +215,40 @@
         <ol>
           <li><b>Open</b> a VIA JSON and its frames folder.</li>
           <li>No track ids yet? <b>Track</b> links the boxes across frames.</li>
-          <li>Click an object in the list (or on the image) and press <kbd>1</kbd>-<kbd>9</kbd>, or click its class label. The class changes on <em>every</em> frame of that track.</li>
+          <li>Click an object in the list or on the image and press <kbd>1</kbd>-<kbd>9</kbd>, or click its class label. The class changes on <em>every</em> frame of that track.</li>
           <li>Fix ids: select an object and <b>Merge</b> it into the right id.</li>
           <li>Edits save automatically to <code>*.edited.json</code>. The original is never written.</li>
         </ol>
         <h4>Editing boxes</h4>
         <ul>
-          <li><b>Add box</b>, pick the class, then drag on the image.</li>
-          <li>Drag a box to move it, or its corner handles to resize.</li>
+          <li>Drag on an empty part of the image to draw a box of the <b>New box</b> class. <kbd>Ctrl</kbd>+drag draws on top of another box.</li>
+          <li>Click a box to select it. Drag it to move, or drag a corner to resize.</li>
           <li>Double-click to reach a box hidden behind another.</li>
+          <li>Missing on some frames? <kbd>Ctrl</kbd>+<kbd>C</kbd> the box, go to the frame, <kbd>Ctrl</kbd>+<kbd>V</kbd>. It keeps its track id.</li>
         </ul>
       </div>
       <div>
         <h4>Keyboard</h4>
         <table class=keys>
-          <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>previous / next frame</td></tr>
-          <tr><td><kbd>1</kbd>-<kbd>9</kbd></td><td>set class of selected object (or of new boxes)</td></tr>
-          <tr><td><kbd>Del</kbd></td><td>delete selected box on this frame</td></tr>
+          <tr><th colspan=2>Frames</th></tr>
+          <tr><td><kbd>←</kbd> <kbd>→</kbd> or <kbd>P</kbd> <kbd>N</kbd></td><td>previous / next frame</td></tr>
+          <tr><td><kbd>Home</kbd> <kbd>End</kbd></td><td>first / last frame</td></tr>
+          <tr><td><kbd>PgUp</kbd> <kbd>PgDn</kbd></td><td>back / forward 10 frames</td></tr>
+          <tr><td><kbd>Space</kbd></td><td>play / pause</td></tr>
+          <tr><th colspan=2>Boxes</th></tr>
+          <tr><td><kbd>Tab</kbd> <kbd>Shift</kbd>+<kbd>Tab</kbd></td><td>select next / previous box on this frame</td></tr>
+          <tr><td><kbd>1</kbd>-<kbd>9</kbd></td><td>set class of the selected object on every frame (nothing selected: class for new boxes)</td></tr>
+          <tr><td><kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>V</kbd></td><td>copy the selected box / paste it here with the same track id</td></tr>
+          <tr><td><kbd>Ctrl</kbd>+arrows</td><td>nudge the selected box 1 px (add <kbd>Shift</kbd> for 10 px)</td></tr>
+          <tr><td><kbd>Del</kbd></td><td>delete the selected box on this frame</td></tr>
           <tr><td><kbd>Shift</kbd>+<kbd>Del</kbd></td><td>delete the object on every frame</td></tr>
-          <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Y</kbd></td><td>undo / redo</td></tr>
+          <tr><th colspan=2>View and project</th></tr>
+          <tr><td><kbd>L</kbd> / <kbd>H</kbd></td><td>hide labels / hide boxes on this frame</td></tr>
           <tr><td><kbd>+</kbd> <kbd>-</kbd> <kbd>0</kbd></td><td>zoom in / out / reset (or scroll)</td></tr>
-          <tr><td><kbd>Esc</kbd></td><td>deselect / close dialog</td></tr>
+          <tr><td><kbd>C</kbd> / <kbd>T</kbd></td><td>classes / tracker</td></tr>
+          <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>save now</td></tr>
+          <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Y</kbd></td><td>undo / redo</td></tr>
+          <tr><td><kbd>Esc</kbd></td><td>deselect, stop playback, close dialog</td></tr>
           <tr><td><kbd>?</kbd></td><td>this help</td></tr>
         </table>
       </div>
