@@ -8,6 +8,25 @@ tracks with a built-in **ByteTrack** tracker that runs on your machine.
 
 ![Relabel reviewing a tracked sequence](docs/screenshot.png)
 
+## Why
+
+Labeling continuous frames from a video is repetitive. The same car appears in hundreds of
+consecutive images, so when one of its boxes is wrong (the wrong class, or two ids for one
+object), a frame-by-frame tool such as VIA makes you open every image and fix the same label again
+by hand. Mistakes also slip in, because one missed frame leaves the object labelled inconsistently.
+
+Relabel treats the object, not the frame, as the unit of work. Each box carries a track id that
+links it to the same object in the other frames. When you change a class, merge two ids, or delete
+an object, the change is applied to that object on **every** frame at once. Correcting a
+300-frame track takes one keystroke instead of 300 edits.
+
+This relies on the track ids being consistent: one physical object, one id across the frames.
+If your boxes have no ids, or the ids are unreliable, Relabel links them with **ByteTrack**, a
+multi-object tracker that follows each box from frame to frame using motion prediction and box
+overlap. The better the tracks, the more a single edit fixes. Where the tracker does split one
+object into two ids (for example after a long occlusion), select one and **Merge** it into the
+other, and from then on it behaves as a single object.
+
 ## Features
 
 - **Your own classes.** The class list comes from the project file and anything already used in it.
