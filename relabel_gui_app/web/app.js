@@ -371,7 +371,18 @@ function buildIdOpts(){ const sel=document.getElementById('idsel');
     others.map(t=>`<option value="${esc(t)}">merge into ${esc(shortid(t))}</option>`).join('');
   idselStale=false;
 }
-function classChange(tid,val){ pushUndo([]); cls[tid]=val; markRows(); drawBoxes(); refresh(); }
+function classChange(tid,val){
+  // an untracked box stores its class per box, so its frame must be rewritten on save
+  const fr=isUntracked(tid)?framesWith(tid):[];
+  pushUndo(fr); cls[tid]=val; fr.forEach(k=>edited.add(frames[k].file));
+  markRows(); drawBoxes(); refresh(); }
+// hotkey 1..9: re-class the selected object everywhere, or (nothing selected) pick the new-box class
+function hotkeyClass(n){ const c=CLASSES[n-1]; if(c==null){ toast('No class '+n+' (open Classes to add one)'); return; }
+  if(selected){ if(cls[selected]===c) return;
+    classChange(selected,c);
+    const r=document.querySelector(`.vrow[data-tid="${selected.replace(/"/g,'\\"')}"] .vcls`); if(r) r.textContent=clsDisp(c);
+    toast(shortid(selected)+' → '+c+(isUntracked(selected)?'':' (all frames)')); }
+  else { document.getElementById('addcls').value=c; toast('New boxes: '+c); } }
 // resolve a typed id to a full track_id: accepts the full id, '#835', or '835' (short/number).
 function resolveTid(s){ s=String(s||'').trim(); if(!s) return null;
   const all=presentTids();
@@ -484,6 +495,7 @@ addEventListener('keydown',e=>{
   if(e.key==='+'||e.key==='='){ e.preventDefault(); zoomBy(1.25); return; }   // zoom in
   if(e.key==='-'||e.key==='_'){ e.preventDefault(); zoomBy(1/1.25); return; } // zoom out
   if(e.key==='0'){ e.preventDefault(); zoomReset(); return; }                 // reset zoom
+  if(/^[1-9]$/.test(e.key)&&!e.ctrlKey&&!e.metaKey&&!e.altKey){ e.preventDefault(); hotkeyClass(+e.key); return; }
   if(e.key==='ArrowLeft')step(-1); else if(e.key==='ArrowRight')step(1);
   else if((e.key==='Delete'||e.key==='Backspace')&&selected){e.preventDefault(); e.shiftKey?deleteTrack():deleteSelected();} });
 addEventListener('resize',()=>{ if(!drag&&!draw){ if(zoom!==1) applyZoom(); else drawBoxes(); } });
