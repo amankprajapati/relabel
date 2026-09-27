@@ -2,18 +2,19 @@
 """app.py — entry point for Relabel, a web tool for reviewing and correcting tracked box annotations.
 
 Run it directly:
-    python3 relabel_gui_app/app.py [FOLDER] [--port 8000] [--compare ORIG.json] [--no-browser]
+    python3 relabel_gui_app/app.py [FOLDER] [--port 8001] [--classes a,b,c] [--compare ORIG.json] [--no-browser]
 or as a module:
     python3 -m relabel_gui_app
 
 FOLDER is optional: a clip folder (<stem>_via.json + frames/) or a parent of several. Omit it and
-use the in-GUI "Open" dialog. Standard library only — no pip packages, no Docker. Works on Windows.
+use the in-GUI "Open" dialog. Standard library only, except the optional tracker (numpy). Works on Windows.
 
 Package layout:
     app.py        entry point (this file)         server.py    HTTP routing
     clip.py       Clip model + discovery          render.py    HTML assembly from web/ assets
     compare.py    two-JSON compare state/validate  fsbrowse.py  Open-dialog directory browser
     classdefs.py  class list sources               utils.py     shared helpers
+    tracker.py    ByteTrack-style tracker (numpy)
     web/          index.html · style.css · app.js  (all presentation)
 """
 import argparse
@@ -40,7 +41,7 @@ def build_arg_parser():
     ap.add_argument("--port", type=int, default=8001)
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--compare", default=None,
-                    help="optional: a second VIA json (ORIGINAL/GCP) to diff against on startup;"
+                    help="optional: a second VIA json (the original / before) to diff against on startup;"
                          " you can also pick both JSONs via 'Compare' in the GUI")
     ap.add_argument("--classes", default=None,
                     help="optional: extra classes to offer, as 'car,person,bike' or a text file with one per"

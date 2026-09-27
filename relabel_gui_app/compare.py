@@ -6,7 +6,7 @@ this module only loads the "before" (A) regions and validates that A and B descr
 import json
 import os
 
-# Compare mode: original/GCP labels to diff the (corrected) working set against.
+# Compare mode: original labels to diff the (corrected) working set against.
 # by_file: filename -> [{tid, cls, box}] from the --compare json.
 COMPARE = {"on": False, "by_file": {}}
 

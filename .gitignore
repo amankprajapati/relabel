@@ -3,3 +3,4 @@ __pycache__/
 *.edited.json
 *.tmp
 sample_data/
+sample_dets/
