@@ -1,119 +1,189 @@
-<!doctype html><html><head><meta charset=utf-8><title>Relabel</title>
-<style>{{STYLE}}</style></head><body><div id=app>
-<header>
-  <b>Relabel</b>
-  <button class=ghost onclick=openLoader() title="Open a project / Compare two JSONs">📂 Open</button>
-  <select class=clip id=clipsel onchange=switchClip()>__CLIP_OPTIONS__</select>
-  <button class=ghost onclick=openClasses() title="Add, rename or delete classes">🏷 Classes</button>
-  <button class=ghost onclick=openTracker() title="Link boxes across frames into tracks (ByteTrack, runs locally)">⛓ Track</button>
-  <span class=muted id=stat></span>
-  <span class=muted id=savetgt title="Edits are written here — the original file is never modified" style="margin-left:10px"></span>
-  <span style=flex:1></span>
-  <span class=muted id=dirty></span>
-  <button id=undo class=ghost disabled onclick=undo() title="Undo (Ctrl+Z)">↶ Undo</button>
-  <button id=redo class=ghost disabled onclick=redo() title="Redo (Ctrl+Y)">↷ Redo</button>
-  <button id=save disabled onclick="save(true)" title="Save now to the edited file (also auto-saves)">Save changes</button>
+<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
+<title>Relabel</title>
+<link rel=icon href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='6' width='18' height='14' rx='2' fill='none' stroke='%231f8a94' stroke-width='3'/%3E%3Crect x='12' y='13' width='17' height='13' rx='2' fill='none' stroke='%23ffd23f' stroke-width='3'/%3E%3C/svg%3E">
+<script>try{const t=localStorage.getItem('relabel-theme'); if(t) document.documentElement.dataset.theme=t;}catch(e){}</script>
+<style>{{STYLE}}</style></head><body>
+<svg width=0 height=0 style=position:absolute aria-hidden=true>
+  <symbol id=i-open viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id=i-tag viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.5"/></symbol>
+  <symbol id=i-track viewBox="0 0 24 24"><rect x="2" y="9" width="6" height="6" rx="1"/><rect x="16" y="9" width="6" height="6" rx="1"/><path d="M8 12h8"/><path d="M13 9l3 3-3 3"/></symbol>
+  <symbol id=i-undo viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></symbol>
+  <symbol id=i-redo viewBox="0 0 24 24"><path d="M15 14l5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h3"/></symbol>
+  <symbol id=i-save viewBox="0 0 24 24"><path d="M5 3h11l5 5v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M7 3v5h8"/><rect x="7" y="13" width="10" height="8"/></symbol>
+  <symbol id=i-help viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.5V14"/><path d="M12 17.5v.5"/></symbol>
+  <symbol id=i-theme viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 0 0 16z" fill="currentColor"/></symbol>
+  <symbol id=i-prev viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+  <symbol id=i-next viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></symbol>
+  <symbol id=i-zin viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21M8 10.5h5M10.5 8v5"/></symbol>
+  <symbol id=i-zout viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21M8 10.5h5"/></symbol>
+  <symbol id=i-add viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" stroke-dasharray="3 2"/><path d="M12 8v8M8 12h8"/></symbol>
+  <symbol id=i-eye viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id=i-overlap viewBox="0 0 24 24"><rect x="3" y="3" width="12" height="12" rx="1"/><rect x="9" y="9" width="12" height="12" rx="1"/></symbol>
+  <symbol id=i-trash viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+  <symbol id=i-x viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id=i-search viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/></symbol>
+</svg>
+
+<div id=app>
+<header class=topbar>
+  <div class=brand><svg class=logo viewBox="0 0 32 32"><rect x="3" y="6" width="18" height="14" rx="2"/><rect x="12" y="13" width="17" height="13" rx="2"/></svg>Relabel</div>
+  <div class=group>
+    <select class=clip id=clipsel onchange=switchClip() title="Current project">__CLIP_OPTIONS__</select>
+    <button class=btn onclick=openLoader() title="Open a project, or compare two JSONs"><svg class=i><use href="#i-open"/></svg>Open</button>
+  </div>
+  <div class=group>
+    <button class=btn onclick=openClasses() title="Add, rename or delete classes"><svg class=i><use href="#i-tag"/></svg>Classes</button>
+    <button class=btn onclick=openTracker() title="Link boxes across frames into tracks (ByteTrack, runs locally)"><svg class=i><use href="#i-track"/></svg>Track</button>
+  </div>
+  <div class="meta">
+    <span id=stat></span>
+    <span id=savetgt title="Edits are written here. The original file is never modified."></span>
+  </div>
+  <span class=spacer></span>
+  <span class=status id=dirty></span>
+  <div class=group>
+    <button id=undo class="btn icon" disabled onclick=undo() title="Undo (Ctrl+Z)" aria-label=Undo><svg class=i><use href="#i-undo"/></svg></button>
+    <button id=redo class="btn icon" disabled onclick=redo() title="Redo (Ctrl+Y)" aria-label=Redo><svg class=i><use href="#i-redo"/></svg></button>
+    <button id=save class="btn primary" disabled onclick="save(true)" title="Save now (edits also save automatically)"><svg class=i><use href="#i-save"/></svg>Save</button>
+  </div>
+  <button class="btn icon" onclick=openHelp() title="Shortcuts and help (?)" aria-label=Help><svg class=i><use href="#i-help"/></svg></button>
+  <button class="btn icon" onclick=toggleTheme() title="Light / dark theme" aria-label="Toggle theme"><svg class=i><use href="#i-theme"/></svg></button>
 </header>
+
 <div id=body>
-  <div id=main>
-    <div id=stages style="flex:1;display:flex;min-height:0">
-      <div class=stage id=stageA style="display:none;position:relative;border-right:2px solid var(--line)">
-        <div style="position:absolute;top:6px;left:8px;z-index:5;font-size:.72rem;background:#7a1f2b;color:#fff;padding:2px 7px;border-radius:4px">GCP · before</div>
-        <div class=wrap id=wrapA><img id=imgA onload="zoomImg(this);drawBoxesA()"></div>
+  <main id=main>
+    <div class=toolbar>
+      <div class=group>
+        <button id=addbtn class=btn onclick=toggleAdd() title="Draw a new box (then drag on the image)"><svg class=i><use href="#i-add"/></svg>Add box</button>
+        <select id=addcls title="Class for new boxes (keys 1-9 with nothing selected)"></select>
+        <label class=check title="New boxes get no track id (drawn dashed, not listed as objects)"><input type=checkbox id=adduntr>untracked</label>
       </div>
-      <div class=stage style="position:relative">
-        <div id=capB style="display:none;position:absolute;top:6px;left:8px;z-index:5;font-size:.72rem;background:#0a5d3a;color:#fff;padding:2px 7px;border-radius:4px">corrected · after (editable)</div>
-        <div class=wrap id=wrap><img id=img onload="zoomImg(this);drawBoxes()"></div>
+      <span class=sep></span>
+      <div class=group>
+        <button id=hidebtn class=btn onclick=toggleHide() title="Hide or show the boxes on this frame (view only)"><svg class=i><use href="#i-eye"/></svg><span class=lbl>Hide boxes</span></button>
+        <button id=numbtn class=btn onclick=toggleNum() title="Show class numbers instead of names">123</button>
+      </div>
+      <span class=sep></span>
+      <div class=group title="Find frames where two boxes overlap by at least this IoU">
+        <button id=ovlbtn class=btn onclick=toggleOverlaps()><svg class=i><use href="#i-overlap"/></svg>Overlaps</button>
+        <input id=ioth type=number value=0.95 step=0.01 min=0 max=1 onchange=refreshOverlaps() title="IoU threshold" aria-label="IoU threshold">
+        <span id=ovlnav class=nav style="display:none">
+          <button class="btn icon" onclick=gotoOverlap(-1) title="Previous overlap frame" aria-label="Previous overlap"><svg class=i><use href="#i-prev"/></svg></button>
+          <span class=muted id=ovlcount></span>
+          <button class="btn icon" onclick=gotoOverlap(1) title="Next overlap frame" aria-label="Next overlap"><svg class=i><use href="#i-next"/></svg></button>
+        </span>
+      </div>
+      <span class=spacer></span>
+      <div class=group>
+        <button class="btn icon" onclick=zoomBy(1/1.25) title="Zoom out (-)" aria-label="Zoom out"><svg class=i><use href="#i-zout"/></svg></button>
+        <button class="btn zoom" onclick=zoomReset() title="Reset zoom (0). Scroll over the image to zoom at the cursor."><span id=zoomlbl>100%</span></button>
+        <button class="btn icon" onclick=zoomBy(1.25) title="Zoom in (+)" aria-label="Zoom in"><svg class=i><use href="#i-zin"/></svg></button>
       </div>
     </div>
-    <footer>
-      <button class=ghost onclick=step(-1)>◀</button>
-      <input type=range id=slider min=0 value=0 oninput=go(+this.value)>
-      <button class=ghost onclick=step(1)>▶</button>
-      <span class=muted id=counter></span>
-      <span class=divider></span>
-      <button class=ghost onclick=zoomBy(1/1.25) title="Zoom out (−)">🔍−</button>
-      <button class=ghost onclick=zoomReset() title="Reset zoom (0)"><span id=zoomlbl>100%</span></button>
-      <button class=ghost onclick=zoomBy(1.25) title="Zoom in (+). Scroll the wheel over the image to zoom at the cursor.">🔍+</button>
-      <span class=divider></span>
-      <button id=addbtn class=ghost onclick=toggleAdd()>✏️ Add box</button>
-      as <select id=addcls title="class for new boxes"></select>
-      <label class=muted title="New boxes get no track id (drawn dashed, not listed as objects)"><input type=checkbox id=adduntr> untracked</label>
-      <button id=hidebtn class=ghost onclick=toggleHide() title="Hide/show all boxes on THIS frame (view only). Useful when a box hides the object under it.">🙈 Hide boxes</button>
-      <button id=numbtn class=ghost onclick=toggleNum() title="Toggle class labels between the full name and the class number">123</button>
-      <button id=ovlbtn class=ghost onclick=toggleOverlaps() title="Show only frames where two boxes overlap with IoU >= threshold (highlights the overlapping pair)">⿻ Overlaps</button>
-      <input id=ioth type=number value=0.95 step=0.01 min=0 max=1 style="width:62px" onchange=refreshOverlaps() title="IoU threshold">
-      <span id=ovlnav style="display:none;align-items:center;gap:6px">
-        <button class=ghost onclick=gotoOverlap(-1) title="previous overlap frame">◀</button>
-        <span class=muted id=ovlcount></span>
-        <button class=ghost onclick=gotoOverlap(1) title="next overlap frame">▶</button>
-      </span>
-      <span id=selbar>Selected <b id=selid></b> · merge into
-        <input id=idinput placeholder="type id e.g. 835" style="width:120px"
-          title="Type the target object's id (short like 835 or the full id) and press Enter or Merge">
-        <button class=ghost onclick=mergeTyped()>Merge</button>
-        <select id=idsel onchange=reassignId() title="or pick from the list"></select>
-        <button class=ghost onclick=deleteSelected() title="Delete this box on THIS frame (Delete key)">🗑 Delete (frame)</button>
-        <button class=ghost onclick=deleteTrack() title="Delete this object ENTIRELY — every box across all frames (Shift+Delete)">🗑 Delete ID</button></span>
-      <span id=diffnav style="display:none;align-items:center;gap:6px">
-        <span class=divider></span>
-        <button class=ghost onclick=gotoDiff(-1) title="previous changed frame">◀ diff</button>
+
+    <div id=stages>
+      <div class="stage stageA" id=stageA style="display:none">
+        <div class="cap before">Before · A</div>
+        <div class=wrap id=wrapA><img id=imgA alt="" onload="zoomImg(this);drawBoxesA()"></div>
+      </div>
+      <div class=stage>
+        <div class="cap after" id=capB style="display:none">After · B (editable)</div>
+        <div class=wrap id=wrap><img id=img alt="" onload="zoomImg(this);drawBoxes()"></div>
+      </div>
+    </div>
+
+    <footer class=timeline>
+      <button class="btn icon" onclick=step(-1) title="Previous frame (Left arrow)" aria-label="Previous frame"><svg class=i><use href="#i-prev"/></svg></button>
+      <input type=range id=slider min=0 value=0 oninput=go(+this.value) aria-label=Frame>
+      <button class="btn icon" onclick=step(1) title="Next frame (Right arrow)" aria-label="Next frame"><svg class=i><use href="#i-next"/></svg></button>
+      <span class=counter id=counter></span>
+      <span id=diffnav class=nav style="display:none">
+        <span class=sep></span>
+        <button class=btn onclick=gotoDiff(-1) title="Previous changed frame"><svg class=i><use href="#i-prev"/></svg>diff</button>
         <span class=muted id=diffcount></span>
-        <button class=ghost onclick=gotoDiff(1) title="next changed frame">diff ▶</button>
+        <button class=btn onclick=gotoDiff(1) title="Next changed frame">diff<svg class=i><use href="#i-next"/></svg></button>
       </span>
     </footer>
-  </div>
-  <div id=side>
-    <div class=hd>Objects <span class=muted id=vcount></span></div>
-    <div id=filterbar style="padding:8px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;font-size:.8rem">
-      <span class=muted>Filter:</span>
-      <select id=clsfilter onchange=applyClassFilter() style="flex:1"
-        title="Show only this class in the list. Boxes on the frame are NOT affected."></select>
+  </main>
+
+  <aside id=side>
+    <section id=selbar class=card style="display:none">
+      <div class=cardhead>Selected <b id=selid></b></div>
+      <div class=row>
+        <input id=idinput placeholder="Merge into id, e.g. 835" title="Type the target object's id and press Enter">
+        <button class=btn onclick=mergeTyped()>Merge</button>
+      </div>
+      <select id=idsel onchange=reassignId() title="Or pick the object to merge into"></select>
+      <div class=row>
+        <button class="btn danger" onclick=deleteSelected() title="Delete this box on this frame only (Delete)"><svg class=i><use href="#i-trash"/></svg>This frame</button>
+        <button class="btn danger" onclick=deleteTrack() title="Delete every box of this object (Shift+Delete)"><svg class=i><use href="#i-trash"/></svg>All frames</button>
+      </div>
+      <div class=muted style="font-size:.74rem">Keys 1-9 set its class on every frame.</div>
+    </section>
+    <div class=sidehead>Objects <span class=muted id=vcount></span></div>
+    <div class=filters>
+      <div class=search><svg class=i><use href="#i-search"/></svg><input id=vsearch placeholder="Find id" oninput=renderList() aria-label="Find object by id"></div>
+      <select id=clsfilter onchange=applyClassFilter() title="Only list objects of this class (boxes on the image are unaffected)"></select>
     </div>
-    <div id=diffbar style="display:none;padding:8px 14px;border-bottom:1px solid var(--line)">
-      <b style="font-size:.82rem">Changed frames <span id=diffn class=muted></span></b>
-      <div id=difflist style="max-height:38vh;overflow:auto;margin-top:6px;font-size:.78rem"></div>
+    <div id=diffbar style="display:none">
+      <div class=sidehead>Changed frames <span id=diffn class=muted></span></div>
+      <div id=difflist></div>
     </div>
     <div id=list></div>
-    <div class=hint>Click an object to highlight &amp; jump to a clear frame; change its class (all frames).<br>
-      <b>Add:</b> Add box → pick class → drag. <b>Move/resize:</b> drag a box / its corner handles.<br>
-      <b>Overlapping / small box inside a big one:</b> double-click to select the box behind, then drag to move it.<br>
-      <b>Reassign ID:</b> select a box → pick an existing ID to merge. <b>Delete:</b> select → Delete.<br>
-      Then <b>Save changes</b>.</div>
-  </div>
+  </aside>
 </div>
-</div><div id=toast></div>
-<div id=loader style="display:none;position:fixed;inset:0;background:#000b;z-index:100;align-items:center;justify-content:center">
-  <div style="background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:20px;width:660px;max-width:92vw;max-height:88vh;overflow:auto">
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px"><b style="font-size:1.1rem">Open a project</b><span style=flex:1></span><button class=ghost onclick=closeLoader()>✕</button></div>
-    <div style="display:flex;gap:8px;margin-bottom:16px">
-      <button id=m_single class=on onclick="setMode('single')">Review · 1 JSON</button>
-      <button id=m_compare class=ghost onclick="setMode('compare')">Compare · 2 JSONs</button></div>
-    <label class=muted>Frames folder</label>
-    <div style="display:flex;gap:6px;margin:4px 0 12px"><input id=f_frames style="flex:1" placeholder="/path/to/images  (blank = frames/ or images/ next to the JSON)"><button class=ghost onclick="browse('f_frames',true)">Browse…</button></div>
-    <label class=muted id=lab_jsonB>Annotation JSON</label>
-    <div style="display:flex;gap:6px;margin:4px 0 12px"><input id=f_jsonB style="flex:1" placeholder="/path/to/combined_via.json"><button class=ghost onclick="browse('f_jsonB',false)">Browse…</button></div>
+</div>
+<div id=toast role=status></div>
+
+<div id=loader class=modal style="display:none">
+  <div class="dialog wide">
+    <div class=dlghead><b>Open a project</b><span class=spacer></span><button class="btn icon" onclick=closeLoader() aria-label=Close><svg class=i><use href="#i-x"/></svg></button></div>
+    <div class=segmented>
+      <button id=m_single class=on onclick="setMode('single')">Review one JSON</button>
+      <button id=m_compare class=ghost onclick="setMode('compare')">Compare two JSONs</button>
+    </div>
+    <label class=field><span>Frames folder</span>
+      <span class=row><input id=f_frames placeholder="/path/to/images  (blank = frames/ or images/ next to the JSON)"><button class=btn onclick="browse('f_frames',true)">Browse…</button></span></label>
+    <label class=field><span id=lab_jsonB>Annotation JSON</span>
+      <span class=row><input id=f_jsonB placeholder="/path/to/project_via.json"><button class=btn onclick="browse('f_jsonB',false)">Browse…</button></span></label>
     <div id=row_jsonA style="display:none">
-      <label class=muted>Original JSON (before / GCP) — A</label>
-      <div style="display:flex;gap:6px;margin:4px 0 12px"><input id=f_jsonA style="flex:1" placeholder="/path/to/combined_via.ORIGINAL.json"><button class=ghost onclick="browse('f_jsonA',false)">Browse…</button></div></div>
-    <div id=f_report style="font-size:.82rem;margin:6px 0;white-space:pre-wrap;line-height:1.5"></div>
-    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
-      <button id=btnCheck class=ghost style="display:none" onclick=doCheck()>Check compatibility</button>
-      <button onclick=doOpen()>Open</button></div>
+      <label class=field><span>Original JSON (before) · A</span>
+        <span class=row><input id=f_jsonA placeholder="/path/to/original_via.json"><button class=btn onclick="browse('f_jsonA',false)">Browse…</button></span></label>
+    </div>
+    <div id=f_report></div>
+    <div class=dlgfoot>
+      <button id=btnCheck class=btn style="display:none" onclick=doCheck()>Check compatibility</button>
+      <button class="btn primary" onclick=doOpen()>Open</button>
+    </div>
   </div>
 </div>
+
+<div id=browser class=modal style="display:none">
+  <div class="dialog wide tall">
+    <div class=dlghead>
+      <button class=btn onclick=lsUp()>Up</button>
+      <code id=b_path></code>
+      <button id=b_usefolder class="btn primary" style="display:none" onclick=useFolder()>Use this folder</button>
+      <button class="btn icon" onclick=closeBrowser() aria-label=Close><svg class=i><use href="#i-x"/></svg></button>
+    </div>
+    <div id=b_list></div>
+  </div>
+</div>
+
 <div id=classdlg class=modal style="display:none">
   <div class=dialog>
-    <div class=dlghead><b>Classes</b><span class=muted>Changes apply to every object and are saved to the project file.</span><span style=flex:1></span><button class=ghost onclick=closeClasses()>✕</button></div>
+    <div class=dlghead><b>Classes</b><span class=spacer></span><button class="btn icon" onclick=closeClasses() aria-label=Close><svg class=i><use href="#i-x"/></svg></button></div>
+    <p class=muted>Changes apply to every object and are saved to the project file. The number is the class's hotkey.</p>
     <div id=clslist></div>
-    <div class=addrow><input id=newcls placeholder="New class name"><button onclick=addClass()>Add class</button></div>
+    <div class=row><input id=newcls placeholder="New class name"><button class="btn primary" onclick=addClass()>Add class</button></div>
   </div>
 </div>
+
 <div id=trackdlg class=modal style="display:none">
   <div class=dialog>
-    <div class=dlghead><b>Run tracker</b><span class=muted>ByteTrack, running locally on this machine</span><span style=flex:1></span><button class=ghost onclick=closeTracker()>✕</button></div>
-    <p class=muted style="margin:0;line-height:1.5">Links the boxes already in this project across frames so each object gets one track id.
-      Each track's class becomes the majority class of its boxes. Boxes are never moved. The whole run is one Ctrl+Z.</p>
+    <div class=dlghead><b>Run tracker</b><span class=muted>ByteTrack, running locally</span><span class=spacer></span><button class="btn icon" onclick=closeTracker() aria-label=Close><svg class=i><use href="#i-x"/></svg></button></div>
+    <p class=muted>Links the boxes already in this project across frames so each object gets one track id.
+      Each track's class becomes the majority class of its boxes. Boxes are never moved, and the whole run is one Ctrl+Z.</p>
     <div class=radios>
       <label><input type=radio name=trkscope value=untracked checked> Only untracked boxes <span class=muted>(keep existing ids)</span></label>
       <label><input type=radio name=trkscope value=all> All boxes <span class=muted>(replace every track id)</span></label>
@@ -124,18 +194,45 @@
       <label for=trkhigh>Confident score threshold</label><input id=trkhigh type=number value=0.5 min=0 max=1 step=0.05>
       <label for=trkcls>Only link boxes of the same class</label><input id=trkcls type=checkbox>
     </div>
-    <p class=muted style="margin:0;font-size:.76rem">Scores are read from a <code>score</code> / <code>confidence</code> attribute on each box; boxes without one count as fully confident.</p>
+    <p class="muted small">Scores are read from a <code>score</code> or <code>confidence</code> attribute on each box. Boxes without one count as fully confident.</p>
     <div id=trkstatus class=muted></div>
-    <div style="display:flex;gap:8px;justify-content:flex-end"><button class=ghost onclick=closeTracker()>Cancel</button><button id=trkrun onclick=runTracker()>Run tracker</button></div>
+    <div class=dlgfoot><button class=btn onclick=closeTracker()>Cancel</button><button id=trkrun class="btn primary" onclick=runTracker()>Run tracker</button></div>
   </div>
 </div>
-<div id=browser style="display:none;position:fixed;inset:0;background:#000b;z-index:110;align-items:center;justify-content:center">
-  <div style="background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;width:640px;max-width:92vw;height:70vh;display:flex;flex-direction:column">
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><button class=ghost onclick=lsUp()>⬆ Up</button>
-      <code id=b_path style="flex:1;font-size:.76rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl;text-align:left"></code>
-      <button id=b_usefolder class=ghost style="display:none" onclick=useFolder()>✓ Use this folder</button>
-      <button class=ghost onclick=closeBrowser()>✕</button></div>
-    <div id=b_list style="flex:1;overflow:auto;border:1px solid var(--line);border-radius:6px"></div>
+<div id=helpdlg class=modal style="display:none" onclick="if(event.target===this)closeHelp()">
+  <div class="dialog wide">
+    <div class=dlghead><b>How to use Relabel</b><span class=spacer></span><button class="btn icon" onclick=closeHelp() aria-label=Close><svg class=i><use href="#i-x"/></svg></button></div>
+    <div class=helpgrid>
+      <div>
+        <h4>Workflow</h4>
+        <ol>
+          <li><b>Open</b> a VIA JSON and its frames folder.</li>
+          <li>No track ids yet? <b>Track</b> links the boxes across frames.</li>
+          <li>Click an object in the list (or on the image) and press <kbd>1</kbd>-<kbd>9</kbd>, or click its class label. The class changes on <em>every</em> frame of that track.</li>
+          <li>Fix ids: select an object and <b>Merge</b> it into the right id.</li>
+          <li>Edits save automatically to <code>*.edited.json</code>. The original is never written.</li>
+        </ol>
+        <h4>Editing boxes</h4>
+        <ul>
+          <li><b>Add box</b>, pick the class, then drag on the image.</li>
+          <li>Drag a box to move it, or its corner handles to resize.</li>
+          <li>Double-click to reach a box hidden behind another.</li>
+        </ul>
+      </div>
+      <div>
+        <h4>Keyboard</h4>
+        <table class=keys>
+          <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>previous / next frame</td></tr>
+          <tr><td><kbd>1</kbd>-<kbd>9</kbd></td><td>set class of selected object (or of new boxes)</td></tr>
+          <tr><td><kbd>Del</kbd></td><td>delete selected box on this frame</td></tr>
+          <tr><td><kbd>Shift</kbd>+<kbd>Del</kbd></td><td>delete the object on every frame</td></tr>
+          <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Y</kbd></td><td>undo / redo</td></tr>
+          <tr><td><kbd>+</kbd> <kbd>-</kbd> <kbd>0</kbd></td><td>zoom in / out / reset (or scroll)</td></tr>
+          <tr><td><kbd>Esc</kbd></td><td>deselect / close dialog</td></tr>
+          <tr><td><kbd>?</kbd></td><td>this help</td></tr>
+        </table>
+      </div>
+    </div>
   </div>
 </div>
 <script>{{SCRIPT}}</script></body></html>

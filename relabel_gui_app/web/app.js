@@ -36,8 +36,8 @@ async function load(keepIdx,keepSel){
   buildAddcls();
   outName=d.out_name||''; srcName=d.src_name||'';
   { const el=document.getElementById('savetgt');
-    if(el) el.innerHTML = outName ? ('💾 saving to <b>'+outName+'</b> · original untouched'
-        + (d.resumed?' · resumed prior edits':'')) : ''; }
+    if(el) el.innerHTML = outName ? ('Saving to <b>'+esc(outName)+'</b> · original untouched'
+        + (d.resumed?' · resumed earlier edits':'')) : ''; }
   zoom=1; { const l=document.getElementById('zoomlbl'); if(l) l.textContent='100%'; }
   overlapOn=false; overlapIdx=[];
   { const b=document.getElementById('ovlbtn'); if(b) b.classList.remove('on');
@@ -143,9 +143,11 @@ function renderList(){
   fsel.innerHTML='<option value="">All classes</option>'+present.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
   fsel.value=classFilter;
   // filter ONLY the list; the frame still draws every box (drawBoxes is unaffected)
-  const tids=classFilter?allTids.filter(t=>(cls[t]||'NONE')===classFilter):allTids;
-  document.getElementById('vcount').textContent=classFilter
-    ? '('+tids.length+' of '+allTids.length+')' : '('+allTids.length+')';
+  const q=(document.getElementById('vsearch').value||'').trim().toLowerCase().replace(/^#/,'');
+  const tids=allTids.filter(t=>(!classFilter||(cls[t]||'NONE')===classFilter)
+    && (!q||String(t).toLowerCase().includes(q)||shortid(t).toLowerCase().includes(q)));
+  document.getElementById('vcount').textContent=tids.length<allTids.length
+    ? tids.length+' of '+allTids.length : String(allTids.length);
   // build the whole list as ONE innerHTML string (per-row createElement/appendChild + a closure
   // each was ~1.3s for 7700 objects). Row click is handled by ONE delegated listener (see init).
   // class shown as a compact TEXT label (not a per-row <select> — 7700 selects x18 options was the
@@ -187,7 +189,7 @@ function go(i){ idx=Math.max(0,Math.min(frames.length-1,i|0));
   img().src=frameURL(frames[idx].file);
   if(COMPARE) document.getElementById('imgA').src=frameURL(frames[idx].file);
   document.getElementById('slider').value=idx;
-  document.getElementById('counter').textContent='frame '+(idx+1)+'/'+frames.length+' · #'+frames[idx].f;
+  document.getElementById('counter').textContent='Frame '+(idx+1)+' / '+frames.length+'  ·  '+frames[idx].file;
   updateHideBtn(); }
 function step(d){ go(idx+d); }
 /* ---- zoom (resize the displayed image; boxes recompute from clientWidth so they stay aligned) ---- */
@@ -228,7 +230,7 @@ function gotoOverlap(dir){ if(!overlapIdx.length){ toast('no overlaps'); return;
 /* ---- hide boxes on a frame (view only) ---- */
 function isHidden(){ return frames[idx] && hidden.has(frames[idx].file); }
 function updateHideBtn(){ const b=document.getElementById('hidebtn'); if(!b)return;
-  const h=isHidden(); b.textContent=h?'👁 Show boxes':'🙈 Hide boxes'; b.classList.toggle('on',h);
+  const h=isHidden(); b.querySelector('.lbl').textContent=h?'Show boxes':'Hide boxes'; b.classList.toggle('on',h);
   document.getElementById('wrap').classList.toggle('boxeshidden',h); }
 function toggleHide(){ if(!frames[idx])return;
   const f=frames[idx].file;
@@ -362,7 +364,7 @@ function pick(tid, jump=true){
 }
 function showSel(){
   const bar=document.getElementById('selbar'); if(!selected){bar.style.display='none';return;}
-  bar.style.display='inline-flex'; document.getElementById('selid').textContent=shortid(selected);
+  bar.style.display='flex'; document.getElementById('selid').textContent=shortid(selected);
   // don't build the (potentially thousands-long) merge dropdown here — that made every click lag.
   // reset it to just the placeholder and mark it stale; buildIdOpts() fills it on first open.
   document.getElementById('idsel').innerHTML='<option value="">(merge into… )</option>';
@@ -450,7 +452,7 @@ function deselect(){ if(!selected)return; selected=null; markSel(); showSel(); d
 // click ANYWHERE that isn't a box, a control, or the object list -> unselect the current box.
 // (box/handle mousedown call stopPropagation, so a click ON a box never reaches this.)
 addEventListener('mousedown',e=>{ if(!selected||addMode)return;
-  if(e.target.closest('.vbox,.vrow,.vcls,button,select,input,textarea,#selbar,#loader,#browser,#classdlg,#trackdlg'))return;
+  if(e.target.closest('.vbox,.vrow,.vcls,button,select,input,textarea,#selbar,#loader,#browser,#classdlg,#trackdlg,#helpdlg,#side'))return;
   deselect(); });
 const wrap=document.getElementById('wrap');
 wrap.addEventListener('mousedown',e=>{ if(!addMode||isHidden())return; e.preventDefault();
@@ -495,6 +497,8 @@ addEventListener('keydown',e=>{
   const z=(e.key==='z'||e.key==='Z'), y=(e.key==='y'||e.key==='Y');
   if((e.ctrlKey||e.metaKey)&&z&&!e.shiftKey){ e.preventDefault(); undo(); return; }
   if((e.ctrlKey||e.metaKey)&&(y||(z&&e.shiftKey))){ e.preventDefault(); redo(); return; }
+  if(e.key==='?'){ e.preventDefault(); openHelp(); return; }
+  if(e.key==='Escape'&&document.getElementById('helpdlg').style.display==='flex'){ closeHelp(); return; }
   if(e.key==='Escape'&&document.getElementById('classdlg').style.display==='flex'){ closeClasses(); return; }
   if(e.key==='Escape'&&document.getElementById('trackdlg').style.display==='flex'){ closeTracker(); return; }
   if(e.key==='Escape'&&selected){ deselect(); return; }   // Escape also unselects
@@ -564,7 +568,7 @@ function fmtReport(rep){
 async function doCheck(){ const r=document.getElementById('f_report');
   const rep=await (await fetch('/validate',{method:'POST',body:JSON.stringify({
     json_a:val('f_jsonA'),json_b:val('f_jsonB'),frames_dir:val('f_frames')})})).json();
-  r.textContent=fmtReport(rep); r.style.color=rep.ok?'var(--add)':'#ff6b6b'; return rep; }
+  r.textContent=fmtReport(rep); r.style.color=rep.ok?'var(--good)':'var(--bad)'; return rep; }
 // last-ditch flush if the tab is closed within the autosave debounce window: sendBeacon survives unload
 addEventListener('beforeunload',()=>{ if(!outName || !dirtyCount()) return;
   const edits={}; edited.forEach(fn=>{ const fr=frames.find(f=>f.file===fn);
@@ -573,12 +577,12 @@ addEventListener('beforeunload',()=>{ if(!outName || !dirtyCount()) return;
     new Blob([JSON.stringify({clip:clip,cls:cls,edits:edits,classes:CLASSES})],{type:'application/json'})); }catch(e){} });
 async function doOpen(){
   const r=document.getElementById('f_report');
-  if(!val('f_jsonB')){ r.style.color='#ff6b6b'; r.textContent='✗ pick the annotation JSON'; return; }
-  if(loaderMode==='compare' && !val('f_jsonA')){ r.style.color='#ff6b6b'; r.textContent='✗ pick the original (A) JSON to compare against'; return; }
+  if(!val('f_jsonB')){ r.style.color='var(--bad)'; r.textContent='✗ pick the annotation JSON'; return; }
+  if(loaderMode==='compare' && !val('f_jsonA')){ r.style.color='var(--bad)'; r.textContent='✗ pick the original (A) JSON to compare against'; return; }
   const body={ json:val('f_jsonB'), frames_dir:val('f_frames') };
   if(loaderMode==='compare') body.compare_json=val('f_jsonA');
   const res=await (await fetch('/open',{method:'POST',body:JSON.stringify(body)})).json();
-  if(!res.ok){ r.style.color='#ff6b6b'; r.textContent = res.error ? ('✗ '+res.error) : fmtReport(res.report||{errors:['open failed']}); return; }
+  if(!res.ok){ r.style.color='var(--bad)'; r.textContent = res.error ? ('✗ '+res.error) : fmtReport(res.report||{errors:['open failed']}); return; }
   const sel=document.getElementById('clipsel'); sel.innerHTML='<option>'+esc(res.name)+'</option>'; sel.value=res.name; clip=res.name;
   closeLoader(); await load(0,null);
 }
@@ -715,6 +719,11 @@ function scheduleAutosave(delay){                            // debounced auto-s
   autosaveTimer=setTimeout(()=>{ autosaveTimer=null; if(dirtyCount()) doSave(false); },
                            delay==null?900:delay);
 }
+function openHelp(){ document.getElementById('helpdlg').style.display='flex'; }
+function closeHelp(){ document.getElementById('helpdlg').style.display='none'; }
+function toggleTheme(){ const r=document.documentElement;
+  const next=(r.dataset.theme||'dark')==='light'?'dark':'light';          // dark is the CSS default
+  r.dataset.theme=next; try{ localStorage.setItem('relabel-theme',next); }catch(e){} }
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.style.opacity=1;setTimeout(()=>t.style.opacity=0,2500);}
 
 // build the merge-into options only when the user actually opens the dropdown (fires before it renders)
