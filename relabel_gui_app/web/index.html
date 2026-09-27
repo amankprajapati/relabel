@@ -4,6 +4,7 @@
   <b>Relabel</b>
   <button class=ghost onclick=openLoader() title="Open a project / Compare two JSONs">📂 Open</button>
   <select class=clip id=clipsel onchange=switchClip()>__CLIP_OPTIONS__</select>
+  <button class=ghost onclick=openClasses() title="Add, rename or delete classes">🏷 Classes</button>
   <span class=muted id=stat></span>
   <span class=muted id=savetgt title="Edits are written here — the original file is never modified" style="margin-left:10px"></span>
   <span style=flex:1></span>
@@ -98,6 +99,13 @@
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
       <button id=btnCheck class=ghost style="display:none" onclick=doCheck()>Check compatibility</button>
       <button onclick=doOpen()>Open</button></div>
+  </div>
+</div>
+<div id=classdlg class=modal style="display:none">
+  <div class=dialog>
+    <div class=dlghead><b>Classes</b><span class=muted>Changes apply to every object and are saved to the project file.</span><span style=flex:1></span><button class=ghost onclick=closeClasses()>✕</button></div>
+    <div id=clslist></div>
+    <div class=addrow><input id=newcls placeholder="New class name"><button onclick=addClass()>Add class</button></div>
   </div>
 </div>
 <div id=browser style="display:none;position:fixed;inset:0;background:#000b;z-index:110;align-items:center;justify-content:center">

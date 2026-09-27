@@ -71,7 +71,7 @@ def make_handler(clips, default_classes=()):
             p = urlparse(self.path).path
             if p == "/save":
                 body = self._body(); c = body.get("clip")
-                total = clips[c].save_state(body.get("cls", {}), body.get("edits", {})) if c in clips else 0
+                total = clips[c].save_state(body.get("cls", {}), body.get("edits", {}), body.get("classes")) if c in clips else 0
                 print(f"saved [{c}]: {total} regions")
                 self._json({"ok": True, "regions": total})
             elif p == "/validate":                    # check two jsons BEFORE comparing

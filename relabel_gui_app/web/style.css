@@ -44,5 +44,15 @@
  .vcls:hover{border-color:var(--accent)}
  .vrow.changed .vid{color:var(--chg)}.vrow.changed .vid::after{content:" ●";color:var(--chg)}
  .hint{padding:10px 14px;border-top:1px solid var(--line);color:var(--muted);font-size:.74rem;line-height:1.55}
+ .modal{position:fixed;inset:0;background:#000b;z-index:100;align-items:center;justify-content:center}
+ .dialog{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;width:560px;max-width:92vw;max-height:85vh;display:flex;flex-direction:column;gap:12px}
+ .dlghead{display:flex;align-items:center;gap:10px}.dlghead b{font-size:1.05rem}
+ #clslist{overflow:auto;border:1px solid var(--line);border-radius:6px;min-height:60px}
+ .crow{display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid #202832}
+ .crow .cname{flex:1;min-width:0}.crow .cuse{width:84px;text-align:right}
+ kbd{font-family:ui-monospace,monospace;font-size:.72rem;color:var(--muted);width:14px;text-align:center}
+ input{background:#0f1216;color:var(--ink);border:1px solid #33404a;border-radius:5px;padding:6px 9px;font-size:.86rem}
+ button.small{padding:5px 9px}button.danger:hover{background:#7a1f2b}
+ .addrow{display:flex;gap:8px}.addrow input{flex:1}
  #toast{position:fixed;bottom:70px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;
    padding:10px 18px;border-radius:6px;opacity:0;transition:.3s;z-index:60}

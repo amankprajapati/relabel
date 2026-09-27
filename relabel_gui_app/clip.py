@@ -111,7 +111,18 @@ class Clip:
                 "resumed": os.path.isfile(self.out_path),          # already had edits on disk
                 "class_options": class_options_of(self.via)}       # dropdown options FROM this JSON
 
-    def save_state(self, cls, edits):
+    def set_classes(self, labels):
+        """Write the GUI's class list into _via_attributes.region.class.options, keeping the existing
+        VIA key for labels that were already declared (new labels use the label as the key)."""
+        region = self.via.setdefault("_via_attributes", {}).setdefault("region", {})
+        attr = region.setdefault("class", {"type": "dropdown", "description": "", "default_options": {}})
+        old = attr.get("options") or {}
+        key_of = {(str(v) if v not in (None, "") else str(k)): k for k, v in old.items()}
+        attr["options"] = {key_of.get(lbl, lbl): lbl for lbl in labels}
+
+    def save_state(self, cls, edits, classes=None):
+        if classes is not None:
+            self.set_classes([str(c) for c in classes])
         by_name = {v["filename"]: v for v in self.meta.values()}
         for fn, regs in edits.items():
             v = by_name.get(fn)
