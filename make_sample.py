@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """Generate a small synthetic tracked-box project to try the tool with (standard library only).
 
-    python make_sample.py [OUT_DIR]      # default: ./sample_data
+    python make_sample.py [OUT_DIR] [--detections]      # default OUT_DIR: ./sample_data
 
 Writes OUT_DIR/frames/frame_000000.png ... and OUT_DIR/sample_via.json: a few coloured squares
 moving across the frame, each with a stable track_id, plus a class list declared in the JSON.
+With --detections the boxes look like raw detector output instead: no track ids, a `score`
+attribute, slight jitter and the odd missed box. Use it to try the tracker.
 """
 import json
 import os
+import random
 import struct
 import sys
 import zlib
@@ -33,7 +36,8 @@ def png(path, pixels):
                 + chunk(b"IDAT", zlib.compress(raw, 6)) + chunk(b"IEND", b""))
 
 
-def main(out):
+def main(out, detections=False):
+    rnd = random.Random(0)
     frames_dir = os.path.join(out, "frames")
     os.makedirs(frames_dir, exist_ok=True)
     meta = {}
@@ -47,8 +51,15 @@ def main(out):
                 row = pixels[yy]
                 for xx in range(x, x + s):
                     row[3 * xx:3 * xx + 3] = rgb
-            regions.append({"shape_attributes": {"name": "rect", "x": x, "y": y, "width": s, "height": s},
-                            "region_attributes": {"class": cls, "track_id": tid}})
+            if not detections:
+                regions.append({"shape_attributes": {"name": "rect", "x": x, "y": y, "width": s, "height": s},
+                                "region_attributes": {"class": cls, "track_id": tid}})
+            elif rnd.random() > 0.08:                     # a detector misses the odd frame
+                j = [rnd.randint(-3, 3) for _ in range(4)]
+                regions.append({"shape_attributes": {"name": "rect", "x": x + j[0], "y": y + j[1],
+                                                     "width": s + j[2], "height": s + j[3]},
+                                "region_attributes": {"class": cls, "track_id": "",
+                                                      "score": round(rnd.uniform(0.3, 0.99), 2)}})
         name = f"frame_{f:06d}.png"
         png(os.path.join(frames_dir, name), pixels)
         size = os.path.getsize(os.path.join(frames_dir, name))
@@ -67,4 +78,5 @@ def main(out):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1] if len(sys.argv) > 1 else "sample_data")
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    main(args[0] if args else "sample_data", "--detections" in sys.argv)

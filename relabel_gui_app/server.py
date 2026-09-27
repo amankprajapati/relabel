@@ -9,6 +9,7 @@ Routes
   POST /save      -> write edits to the .edited.json            (Clip.save_state)
   POST /validate  -> pre-compare A/B compatibility check        (compare.validate_pair)
   POST /open      -> open a project (single or compare) chosen in the GUI
+  POST /track     -> link boxes into tracks with ByteTrack        (tracker.run)
 """
 import json
 import mimetypes
@@ -20,6 +21,7 @@ from clip import Clip
 from compare import COMPARE, clear_compare, load_compare, validate_pair
 from fsbrowse import listdir_info
 from render import render_index
+import tracker
 
 
 def make_handler(clips, default_classes=()):
@@ -74,6 +76,19 @@ def make_handler(clips, default_classes=()):
                 total = clips[c].save_state(body.get("cls", {}), body.get("edits", {}), body.get("classes")) if c in clips else 0
                 print(f"saved [{c}]: {total} regions")
                 self._json({"ok": True, "regions": total})
+            elif p == "/track":                       # ByteTrack over the boxes the client sends
+                b = self._body()
+                prm = b.get("params") or {}
+                kw = {k: float(prm[k]) for k in ("high_thresh", "low_thresh", "match_iou") if k in prm}
+                if "track_buffer" in prm:
+                    kw["track_buffer"] = int(prm["track_buffer"])
+                kw["class_aware"] = bool(prm.get("class_aware"))
+                try:
+                    res = tracker.run(b.get("frames") or [], id_prefix=str(b.get("id_prefix") or "trk#"), **kw)
+                    print(f"tracked: {res['tracks']} tracks over {res['sequences']} sequence(s)")
+                    self._json({"ok": True, **res})
+                except Exception as e:
+                    self._json({"ok": False, "error": str(e)})
             elif p == "/validate":                    # check two jsons BEFORE comparing
                 b = self._body()
                 self._json(validate_pair(b.get("json_a", ""), b.get("json_b", ""), b.get("frames_dir", "")))

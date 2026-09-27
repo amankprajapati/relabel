@@ -48,8 +48,7 @@ async function load(keepIdx,keepSel){
   newN=0; presentTids().forEach(t=>{const n=idNum(t); if(isFinite(n))newN=Math.max(newN,n+1);});
   // next internal id for a NEW untracked box = past the max existing "@uN"
   newU=0; frames.forEach(f=>f.regions.forEach(r=>{ if(isUntracked(r.tid)){const n=parseInt(String(r.tid).replace(/\D+/g,''),10); if(isFinite(n))newU=Math.max(newU,n+1);} }));
-  const best={}; frames.forEach((f,k)=>f.regions.forEach(r=>{const a=r.box[2]*r.box[3];
-    if(a>(best[r.tid]||-1)){best[r.tid]=a; repIdx[r.tid]=k;}}));
+  computeRepIdx();
   document.getElementById('stat').textContent=frames.length+' frames';
   document.getElementById('slider').max=frames.length-1;
   if(addMode) toggleAdd();
@@ -63,11 +62,16 @@ async function load(keepIdx,keepSel){
 }
 /* ---- undo / redo — snapshot ONLY the frames an action touches (not the whole dataset).
    Deep-cloning all frames per action made add/undo/redo laggy on large merged projects. ---- */
+// for each object, the frame where its box is largest: where clicking it in the list jumps to
+function computeRepIdx(){ repIdx={}; const best={};
+  frames.forEach((f,k)=>f.regions.forEach(r=>{const a=r.box[2]*r.box[3];
+    if(a>(best[r.tid]||-1)){best[r.tid]=a; repIdx[r.tid]=k;}})); }
 function snap(idxs){ const fr={}; (idxs||[]).forEach(k=>{ if(frames[k]) fr[k]=JSON.stringify(frames[k].regions); });
   return {fr, c:{...cls}, e:[...edited], sel:selected, ix:idx, cl:[...CLASSES]}; }
 function framesWith(tid){ const a=[]; frames.forEach((f,k)=>{ if(f.regions.some(r=>r.tid===tid)) a.push(k); }); return a; }
 function restore(s){ for(const k in s.fr){ frames[+k].regions=JSON.parse(s.fr[k]); }
   cls={...s.c}; edited=new Set(s.e); selected=s.sel; idx=s.ix;
+  for(const k in s.fr) edited.add(frames[+k].file);   // restored frames may differ from what autosave wrote
   if(s.cl && s.cl.join('\n')!==CLASSES.join('\n')){ CLASSES=[...s.cl]; classesDirty=true; buildAddcls(true); renderClasses(); }
   invalidateTids(); renderList(); go(idx); drawBoxes(); showSel(); refresh(); }
 function pushUndoState(s){ undoStack.push(s); if(undoStack.length>40)undoStack.shift(); redoStack=[]; updBtns(); }
@@ -375,12 +379,13 @@ function classChange(tid,val){
   // an untracked box stores its class per box, so its frame must be rewritten on save
   const fr=isUntracked(tid)?framesWith(tid):[];
   pushUndo(fr); cls[tid]=val; fr.forEach(k=>edited.add(frames[k].file));
+  const row=document.querySelector(`.vrow[data-tid="${tid.replace(/"/g,'\\"')}"]`);
+  if(row){ row.querySelector('.sw').style.background=clscol(val); const v=row.querySelector('.vcls'); if(v) v.textContent=clsDisp(val); }
   markRows(); drawBoxes(); refresh(); }
 // hotkey 1..9: re-class the selected object everywhere, or (nothing selected) pick the new-box class
 function hotkeyClass(n){ const c=CLASSES[n-1]; if(c==null){ toast('No class '+n+' (open Classes to add one)'); return; }
   if(selected){ if(cls[selected]===c) return;
     classChange(selected,c);
-    const r=document.querySelector(`.vrow[data-tid="${selected.replace(/"/g,'\\"')}"] .vcls`); if(r) r.textContent=clsDisp(c);
     toast(shortid(selected)+' → '+c+(isUntracked(selected)?'':' (all frames)')); }
   else { document.getElementById('addcls').value=c; toast('New boxes: '+c); } }
 // resolve a typed id to a full track_id: accepts the full id, '#835', or '835' (short/number).
@@ -445,7 +450,7 @@ function deselect(){ if(!selected)return; selected=null; markSel(); showSel(); d
 // click ANYWHERE that isn't a box, a control, or the object list -> unselect the current box.
 // (box/handle mousedown call stopPropagation, so a click ON a box never reaches this.)
 addEventListener('mousedown',e=>{ if(!selected||addMode)return;
-  if(e.target.closest('.vbox,.vrow,.vcls,button,select,input,textarea,#selbar,#loader,#browser,#classdlg'))return;
+  if(e.target.closest('.vbox,.vrow,.vcls,button,select,input,textarea,#selbar,#loader,#browser,#classdlg,#trackdlg'))return;
   deselect(); });
 const wrap=document.getElementById('wrap');
 wrap.addEventListener('mousedown',e=>{ if(!addMode||isHidden())return; e.preventDefault();
@@ -491,6 +496,7 @@ addEventListener('keydown',e=>{
   if((e.ctrlKey||e.metaKey)&&z&&!e.shiftKey){ e.preventDefault(); undo(); return; }
   if((e.ctrlKey||e.metaKey)&&(y||(z&&e.shiftKey))){ e.preventDefault(); redo(); return; }
   if(e.key==='Escape'&&document.getElementById('classdlg').style.display==='flex'){ closeClasses(); return; }
+  if(e.key==='Escape'&&document.getElementById('trackdlg').style.display==='flex'){ closeTracker(); return; }
   if(e.key==='Escape'&&selected){ deselect(); return; }   // Escape also unselects
   if(e.key==='+'||e.key==='='){ e.preventDefault(); zoomBy(1.25); return; }   // zoom in
   if(e.key==='-'||e.key==='_'){ e.preventDefault(); zoomBy(1/1.25); return; } // zoom out
@@ -562,7 +568,7 @@ async function doCheck(){ const r=document.getElementById('f_report');
 // last-ditch flush if the tab is closed within the autosave debounce window: sendBeacon survives unload
 addEventListener('beforeunload',()=>{ if(!outName || !dirtyCount()) return;
   const edits={}; edited.forEach(fn=>{ const fr=frames.find(f=>f.file===fn);
-    if(fr) edits[fn]=fr.regions.map(r=>({tid:r.tid,box:r.box})); });
+    if(fr) edits[fn]=fr.regions.map(r=>({tid:r.tid,box:r.box,x:r.x})); });
   try{ navigator.sendBeacon('/save',
     new Blob([JSON.stringify({clip:clip,cls:cls,edits:edits,classes:CLASSES})],{type:'application/json'})); }catch(e){} });
 async function doOpen(){
@@ -639,6 +645,41 @@ document.getElementById('clslist').addEventListener('keydown',e=>{
 document.getElementById('clslist').addEventListener('change',e=>{
   if(e.target.classList.contains('cname')) renameClass(+e.target.closest('.crow').dataset.i, e.target.value); });
 
+/* ---- tracker: link boxes into tracks with ByteTrack (runs in the local Python server) ---- */
+function openTracker(){ document.getElementById('trackdlg').style.display='flex';
+  document.getElementById('trkstatus').textContent=''; }
+function closeTracker(){ document.getElementById('trackdlg').style.display='none'; }
+function num(id,d){ const v=parseFloat(document.getElementById(id).value); return isFinite(v)?v:d; }
+async function runTracker(){
+  const scope=document.querySelector('input[name=trkscope]:checked').value;
+  const inScope=r=>scope==='all'||isUntracked(r.tid);
+  const payload=frames.map(f=>({file:f.file, regions:f.regions.filter(inScope)
+    .map(r=>({box:r.box, score:r.s==null?null:r.s, cls:cls[r.tid]||'NONE'}))}));
+  const nBoxes=payload.reduce((a,f)=>a+f.regions.length,0);
+  const st=document.getElementById('trkstatus');
+  if(!nBoxes){ st.textContent=scope==='all'?'There are no boxes to track.':'There are no untracked boxes.'; return; }
+  // new ids must not collide with ids that are kept
+  let prefix='trk#';
+  if(scope!=='all'){ const kept=presentTids(); for(let n=2; kept.some(t=>String(t).startsWith(prefix)); n++) prefix='trk'+n+'#'; }
+  const btn=document.getElementById('trkrun'); btn.disabled=true;
+  st.style.color=''; st.textContent='Tracking '+nBoxes+' boxes…';
+  let res;
+  try{ res=await (await fetch('/track',{method:'POST',body:JSON.stringify({frames:payload,id_prefix:prefix,
+      params:{match_iou:num('trkiou',0.2), track_buffer:Math.round(num('trkbuf',30)),
+              high_thresh:num('trkhigh',0.5), class_aware:document.getElementById('trkcls').checked}})})).json(); }
+  catch(e){ res={ok:false,error:String(e)}; }
+  btn.disabled=false;
+  if(!res.ok){ st.style.color='var(--bad)'; st.textContent='Tracking failed: '+res.error; return; }
+  pushUndo(frames.map((_,k)=>k));                     // one undo step restores every frame
+  frames.forEach((f,k)=>{ const ids=res.ids[k]; let j=0;
+    f.regions.forEach(r=>{ if(inScope(r)) r.tid=ids[j++]; }); edited.add(f.file); });
+  for(const t in res.classes) cls[t]=res.classes[t];
+  selected=null; invalidateTids(); computeRepIdx(); renderList(); drawBoxes(); showSel(); refresh();
+  if(COMPARE) computeDiff();
+  closeTracker();
+  toast('Tracked '+nBoxes+' boxes into '+res.tracks+' tracks'+(res.sequences>1?' across '+res.sequences+' sequences':'')+' · Ctrl+Z to undo');
+}
+
 // Persist to the EDITED file (never the original). Autosave calls this silently; the Save button
 // passes announce=true for a toast. The client already holds the authoritative state, so after a
 // successful write we just reset the baseline (orig=cls, clear edited) instead of reloading — the
@@ -650,7 +691,7 @@ async function doSave(announce){
   const snapCls={...cls};                            // capture the baseline we're about to persist
   const snapEdited=new Set(edited);
   const edits={}; snapEdited.forEach(fn=>{ const fr=frames.find(f=>f.file===fn);
-    if(fr) edits[fn]=fr.regions.map(r=>({tid:r.tid,box:r.box})); });
+    if(fr) edits[fn]=fr.regions.map(r=>({tid:r.tid,box:r.box,x:r.x})); });
   const snapClasses=[...CLASSES]; const hadClassEdit=classesDirty;
   try{
     const j=await (await fetch('/save',{method:'POST',

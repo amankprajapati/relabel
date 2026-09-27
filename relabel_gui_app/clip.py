@@ -13,6 +13,7 @@ from compare import COMPARE
 from utils import natkey
 
 EDITED_SUFFIX = ".edited.json"
+SCORE_KEYS = ("score", "confidence", "conf")   # detector confidence, used by the tracker
 
 
 def is_edited_json(path):
@@ -98,7 +99,17 @@ class Clip:
                     tid = "@u%d" % untr
                     untr += 1
                 sa = r["shape_attributes"]
-                regs.append({"tid": tid, "box": [sa["x"], sa["y"], sa["width"], sa["height"]]})
+                ra = r["region_attributes"]
+                reg = {"tid": tid, "box": [sa["x"], sa["y"], sa["width"], sa["height"]]}
+                extra = {k: v for k, v in ra.items() if k not in ("class", "track_id")}
+                if extra:                   # kept on the box so saving never drops e.g. a score
+                    reg["x"] = extra
+                    score = next((extra[k] for k in SCORE_KEYS if k in extra), None)
+                    try:
+                        reg["s"] = float(score) if score not in (None, "") else None
+                    except (TypeError, ValueError):
+                        pass
+                regs.append(reg)
                 tracks.setdefault(tid, r["region_attributes"].get("class", "NONE"))
             frames.append({"f": fr, "file": v["filename"], "regions": regs,
                            "a": COMPARE["by_file"].get(v["filename"], [])})   # A (original) regions
@@ -131,7 +142,7 @@ class Clip:
             v["regions"] = [{
                 "shape_attributes": {"name": "rect", "x": int(b["box"][0]), "y": int(b["box"][1]),
                                      "width": int(b["box"][2]), "height": int(b["box"][3])},
-                "region_attributes": {"class": cls.get(b["tid"], "NONE"),
+                "region_attributes": {**(b.get("x") or {}), "class": cls.get(b["tid"], "NONE"),
                                       # untracked boxes ("@uN") are written back with an empty track_id
                                       "track_id": "" if str(b["tid"]).startswith("@u") else b["tid"]},
             } for b in regs]

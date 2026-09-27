@@ -1,6 +1,6 @@
 
  :root{--bg:#0f1216;--panel:#161b21;--line:#2a333c;--ink:#e7ecef;--muted:#8a97a3;
-   --accent:#1f8a94;--hi:#ffd23f;--chg:#ff8c42;--add:#4fd67a}
+   --accent:#1f8a94;--bad:#ff6b6b;--hi:#ffd23f;--chg:#ff8c42;--add:#4fd67a}
  *{box-sizing:border-box}
  html,body{margin:0;height:100%;font-family:system-ui,sans-serif;background:var(--bg);color:var(--ink);overflow:hidden}
  #app{display:flex;flex-direction:column;height:100vh}
@@ -54,5 +54,8 @@
  input{background:#0f1216;color:var(--ink);border:1px solid #33404a;border-radius:5px;padding:6px 9px;font-size:.86rem}
  button.small{padding:5px 9px}button.danger:hover{background:#7a1f2b}
  .addrow{display:flex;gap:8px}.addrow input{flex:1}
+ .radios{display:flex;flex-direction:column;gap:6px;font-size:.88rem}
+ .grid2{display:grid;grid-template-columns:1fr 110px;gap:8px 12px;align-items:center;font-size:.86rem}
+ .grid2 input[type=checkbox]{justify-self:start}
  #toast{position:fixed;bottom:70px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;
    padding:10px 18px;border-radius:6px;opacity:0;transition:.3s;z-index:60}
