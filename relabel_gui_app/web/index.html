@@ -54,8 +54,8 @@
   <main id=main>
     <div class=toolbar>
       <div class=group>
-        <button id=addbtn class=btn onclick=toggleAdd() title="Draw a new box (then drag on the image)"><svg class=i><use href="#i-add"/></svg>Add box</button>
-        <select id=addcls title="Class for new boxes (keys 1-9 with nothing selected)"></select>
+        <span class=tlabel title="Drag on an empty part of the image to draw a box (Ctrl+drag to start on top of another box)"><svg class=i><use href="#i-add"/></svg>New box</span>
+        <select id=addcls onchange=this.blur() title="Class for new boxes (keys 1-9 with nothing selected)"></select>
         <label class=check title="New boxes get no track id (drawn dashed, not listed as objects)"><input type=checkbox id=adduntr>untracked</label>
       </div>
       <span class=sep></span>

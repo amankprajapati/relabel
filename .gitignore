@@ -4,3 +4,4 @@ __pycache__/
 *.tmp
 sample_data/
 sample_dets/
+samples/

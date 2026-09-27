@@ -72,8 +72,8 @@ select.clip{max-width:260px}
 
 /* ---- boxes on the image ---- */
 .wrap{position:relative;display:inline-block;line-height:0}
-.wrap.adding{cursor:crosshair}
-.wrap.adding .vbox,.wrap.adding .vbox .h{cursor:crosshair!important;pointer-events:none}
+.wrap img{cursor:crosshair}
+.tlabel{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:.84rem}
 .wrap img{max-height:calc(100vh - 150px);max-width:100%;width:auto;display:block}
 .vbox{position:absolute;border:2px solid #fff;box-sizing:border-box;opacity:.75;cursor:move}
 .vbox.sel{opacity:1;border-width:3px}

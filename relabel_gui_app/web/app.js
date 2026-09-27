@@ -4,7 +4,7 @@ let CLASSES=[...DEFAULT_CLASSES];
 let classesDirty=false;             // class list edited in the Classes dialog, not yet saved
 let clip=document.getElementById('clipsel').value;
 let frames=[], cls={}, orig={}, idx=0, selected=null, repIdx={}, edited=new Set();
-let addMode=false, draw=null, newN=0, newU=0, drag=null, numMode=false;
+let draw=null, newN=0, newU=0, drag=null, numMode=false;
 let undoStack=[], redoStack=[];
 let outName='', srcName='';         // non-destructive: saves go to outName; srcName is never written
 let autosaveTimer=null, saving=false, saveAgain=false;   // debounced autosave state
@@ -51,7 +51,6 @@ async function load(keepIdx,keepSel){
   computeRepIdx();
   document.getElementById('stat').textContent=frames.length+' frames';
   document.getElementById('slider').max=frames.length-1;
-  if(addMode) toggleAdd();
   COMPARE=!!d.compare;
   document.getElementById('stageA').style.display=COMPARE?'flex':'none';
   document.getElementById('capB').style.display=COMPARE?'block':'none';
@@ -235,7 +234,7 @@ function updateHideBtn(){ const b=document.getElementById('hidebtn'); if(!b)retu
 function toggleHide(){ if(!frames[idx])return;
   const f=frames[idx].file;
   if(hidden.has(f)) hidden.delete(f);
-  else { hidden.add(f); if(addMode) toggleAdd(); }   // turn off Add when hiding — can't draw while hidden
+  else hidden.add(f);
   updateHideBtn(); drawBoxes(); if(COMPARE) drawBoxesA();
   toast(isHidden()?'Boxes hidden on this frame':'Boxes shown'); }
 function drawBoxes(){
@@ -258,12 +257,12 @@ function drawBoxes(){
     // this is the fix for "small box inside a large one kept re-selecting the large box"). Otherwise
     // select the front-most box here and move it. DOUBLE-click steps to the box BEHIND, so you can
     // reach a small box sitting inside a larger one; then a normal click+drag moves it.
-    d.onmousedown=(e)=>{ if(addMode)return; if(e.target.classList.contains('h'))return;
+    d.onmousedown=(e)=>{ if(e.ctrlKey||e.metaKey||e.button!==0)return; if(e.target.classList.contains('h'))return;
       e.stopPropagation();
       const si=selectedIdx();
       if(si>=0 && pointInRegion(e,si)){ startDrag(e,si,'move'); return; }
       const ci=frontAt(e); if(ci>=0){ pick(frames[idx].regions[ci].tid,false); startDrag(e,ci,'move'); } };
-    d.ondblclick=(e)=>{ if(addMode)return; e.stopPropagation();
+    d.ondblclick=(e)=>{ e.stopPropagation();
       const ci=cycleAt(e);
       if(ci>=0){ const tid=frames[idx].regions[ci].tid; pick(tid,false);
         toast('Selected '+shortid(tid)+' · '+cls[tid]+' · drag to move it'); } };
@@ -442,20 +441,18 @@ addEventListener('mousemove',e=>{ if(!drag)return; drag.moved=true;
   frames[idx].regions[drag.ri].box=clampBox([Math.round(x),Math.round(y),Math.round(w),Math.round(h)]); drawBoxes(); });
 addEventListener('mouseup',()=>{ if(drag){ if(drag.moved){ pushUndoState(drag.pre); edited.add(frames[idx].file); refresh(); } drag=null; } });
 
-/* ---- add / delete ---- */
-function toggleAdd(){
-  if(!addMode && isHidden()){ toast('Boxes are hidden on this frame — show them to draw'); return; }
-  addMode=!addMode;
-  document.getElementById('addbtn').classList.toggle('on',addMode);
-  document.getElementById('wrap').classList.toggle('adding',addMode); }
+/* ---- draw (VIA style: drag on empty image, or Ctrl+drag anywhere) / delete ---- */
 function deselect(){ if(!selected)return; selected=null; markSel(); showSel(); drawBoxes(); }
 // click ANYWHERE that isn't a box, a control, or the object list -> unselect the current box.
 // (box/handle mousedown call stopPropagation, so a click ON a box never reaches this.)
-addEventListener('mousedown',e=>{ if(!selected||addMode)return;
+addEventListener('mousedown',e=>{ if(!selected)return;
   if(e.target.closest('.vbox,.vrow,.vcls,button,select,input,textarea,#selbar,#loader,#browser,#classdlg,#trackdlg,#helpdlg,#side'))return;
   deselect(); });
 const wrap=document.getElementById('wrap');
-wrap.addEventListener('mousedown',e=>{ if(!addMode||isHidden())return; e.preventDefault();
+wrap.addEventListener('mousedown',e=>{ if(e.button!==0)return;
+  if(e.target.closest('.vbox')&&!(e.ctrlKey||e.metaKey))return;      // a plain press on a box selects/moves it
+  if(isHidden()){ toast('Boxes are hidden on this frame. Press H to show them.'); return; }
+  e.preventDefault();
   const r=img().getBoundingClientRect(); draw={ox:e.clientX-r.left,oy:e.clientY-r.top,r};
   const p=document.createElement('div'); p.className='vbox preview'; p.id='prev'; wrap.appendChild(p); });
 addEventListener('mousemove',e=>{ if(!draw)return; const p=document.getElementById('prev'); if(!p)return;
@@ -465,7 +462,7 @@ addEventListener('mouseup',e=>{ if(!draw)return; const p=document.getElementById
   const s=img().naturalWidth/img().clientWidth;
   const x=Math.min(e.clientX-draw.r.left,draw.ox), y=Math.min(e.clientY-draw.r.top,draw.oy);
   const w=Math.abs((e.clientX-draw.r.left)-draw.ox), h=Math.abs((e.clientY-draw.r.top)-draw.oy); draw=null;
-  if(w<5||h<5)return;
+  if(w<4||h<4)return;                               // a click, not a drag
   pushUndo([idx]);
   const box=clampBox([Math.round(x*s),Math.round(y*s),Math.round(w*s),Math.round(h*s)]);
   const ncls=document.getElementById('addcls').value||'NONE';
