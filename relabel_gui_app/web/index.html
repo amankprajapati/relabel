@@ -1,7 +1,7 @@
-<!doctype html><html><head><meta charset=utf-8><title>Relabel vehicles</title>
+<!doctype html><html><head><meta charset=utf-8><title>Relabel</title>
 <style>{{STYLE}}</style></head><body><div id=app>
 <header>
-  <b>Relabel vehicles</b>
+  <b>Relabel</b>
   <button class=ghost onclick=openLoader() title="Open a project / Compare two JSONs">📂 Open</button>
   <select class=clip id=clipsel onchange=switchClip()>__CLIP_OPTIONS__</select>
   <span class=muted id=stat></span>
@@ -35,9 +35,10 @@
       <button class=ghost onclick=zoomBy(1.25) title="Zoom in (+). Scroll the wheel over the image to zoom at the cursor.">🔍+</button>
       <span class=divider></span>
       <button id=addbtn class=ghost onclick=toggleAdd()>✏️ Add box</button>
-      as <select id=addcls title="pick the class (WHEEL is in the list) then drag"></select>
-      <button id=hidebtn class=ghost onclick=toggleHide() title="Hide/show all boxes on THIS frame (view only). Useful when a box is misaligned with the vehicle.">🙈 Hide boxes</button>
-      <button id=numbtn class=ghost onclick=toggleNum() title="Toggle class labels between the full name (FHWA11) and the class number (11)">123</button>
+      as <select id=addcls title="class for new boxes"></select>
+      <label class=muted title="New boxes get no track id (drawn dashed, not listed as objects)"><input type=checkbox id=adduntr> untracked</label>
+      <button id=hidebtn class=ghost onclick=toggleHide() title="Hide/show all boxes on THIS frame (view only). Useful when a box hides the object under it.">🙈 Hide boxes</button>
+      <button id=numbtn class=ghost onclick=toggleNum() title="Toggle class labels between the full name and the class number">123</button>
       <button id=ovlbtn class=ghost onclick=toggleOverlaps() title="Show only frames where two boxes overlap with IoU >= threshold (highlights the overlapping pair)">⿻ Overlaps</button>
       <input id=ioth type=number value=0.95 step=0.01 min=0 max=1 style="width:62px" onchange=refreshOverlaps() title="IoU threshold">
       <span id=ovlnav style="display:none;align-items:center;gap:6px">
@@ -47,11 +48,11 @@
       </span>
       <span id=selbar>Selected <b id=selid></b> · merge into
         <input id=idinput placeholder="type id e.g. 835" style="width:120px"
-          title="Type the target vehicle's id (short like 835 or the full id) and press Enter or Merge">
+          title="Type the target object's id (short like 835 or the full id) and press Enter or Merge">
         <button class=ghost onclick=mergeTyped()>Merge</button>
         <select id=idsel onchange=reassignId() title="or pick from the list"></select>
         <button class=ghost onclick=deleteSelected() title="Delete this box on THIS frame (Delete key)">🗑 Delete (frame)</button>
-        <button class=ghost onclick=deleteTrack() title="Delete this vehicle ENTIRELY — every box across all frames (Shift+Delete)">🗑 Delete ID</button></span>
+        <button class=ghost onclick=deleteTrack() title="Delete this object ENTIRELY — every box across all frames (Shift+Delete)">🗑 Delete ID</button></span>
       <span id=diffnav style="display:none;align-items:center;gap:6px">
         <span class=divider></span>
         <button class=ghost onclick=gotoDiff(-1) title="previous changed frame">◀ diff</button>
@@ -61,7 +62,7 @@
     </footer>
   </div>
   <div id=side>
-    <div class=hd>Vehicles <span class=muted id=vcount></span></div>
+    <div class=hd>Objects <span class=muted id=vcount></span></div>
     <div id=filterbar style="padding:8px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;font-size:.8rem">
       <span class=muted>Filter:</span>
       <select id=clsfilter onchange=applyClassFilter() style="flex:1"
@@ -72,7 +73,7 @@
       <div id=difflist style="max-height:38vh;overflow:auto;margin-top:6px;font-size:.78rem"></div>
     </div>
     <div id=list></div>
-    <div class=hint>Click a vehicle to highlight &amp; jump to a clear frame; change its class (all frames).<br>
+    <div class=hint>Click an object to highlight &amp; jump to a clear frame; change its class (all frames).<br>
       <b>Add:</b> Add box → pick class → drag. <b>Move/resize:</b> drag a box / its corner handles.<br>
       <b>Overlapping / small box inside a big one:</b> double-click to select the box behind, then drag to move it.<br>
       <b>Reassign ID:</b> select a box → pick an existing ID to merge. <b>Delete:</b> select → Delete.<br>

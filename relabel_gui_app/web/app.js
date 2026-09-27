@@ -1,5 +1,6 @@
 
-let CLASSES=__CLASSES__;            // class dropdown options; REPLACED per-clip from the JSON on load
+const DEFAULT_CLASSES=__CLASSES__;  // from --classes; merged with each project's own class list
+let CLASSES=[...DEFAULT_CLASSES];
 let clip=document.getElementById('clipsel').value;
 let frames=[], cls={}, orig={}, idx=0, selected=null, repIdx={}, edited=new Set();
 let addMode=false, draw=null, newN=0, newU=0, drag=null, numMode=false;
@@ -8,14 +9,14 @@ let outName='', srcName='';         // non-destructive: saves go to outName; src
 let autosaveTimer=null, saving=false, saveAgain=false;   // debounced autosave state
 let classFilter='';  // '' = show all classes in the list; else only this class (frame boxes unaffected)
 let COMPARE=false, changedIdx=[];   // compare mode: A(before) vs B(after); list of changed frame indices
-let _tids=null, idselStale=false;   // perf: cache the sorted vehicle-id list; rebuild merge dropdown lazily
+let _tids=null, idselStale=false;   // perf: cache the sorted object-id list; rebuild merge dropdown lazily
 let hidden=new Set();               // frame files whose boxes are hidden (view only; never saved/shifted)
 let zoom=1;                         // image zoom factor (boxes recompute from clientWidth -> stay aligned)
 let overlapOn=false, overlapIdx=[]; // "high-IoU overlap" filter: frames where two boxes overlap a lot
 // (re)build the "Add box" class dropdown from the current CLASSES list (which comes from the JSON)
-function buildAddcls(){ const sel=document.getElementById('addcls');
-  const keep=sel.value;
-  sel.innerHTML=CLASSES.map(c=>`<option>${c.replace(/</g,'&lt;')}</option>`).join('');
+function buildAddcls(keepCurrent){ const sel=document.getElementById('addcls');
+  const keep=keepCurrent?sel.value:'';
+  sel.innerHTML=CLASSES.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
   if(CLASSES.includes(keep)) sel.value=keep; }
 buildAddcls();
 const img=()=>document.getElementById('img');
@@ -28,8 +29,8 @@ async function load(keepIdx,keepSel){
   const d=await (await fetch('/clipdata?clip='+encodeURIComponent(clip))).json();
   frames=d.frames; cls={}; orig={}; selected=keepSel||null; repIdx={}; edited=new Set(); undoStack=[]; redoStack=[]; invalidateTids(); hidden=new Set();
   if(autosaveTimer){ clearTimeout(autosaveTimer); autosaveTimer=null; }
-  // class dropdown options come FROM the opened JSON (not hardcoded); fall back to the default list
-  if(d.class_options && d.class_options.length){ CLASSES=d.class_options; }
+  // class list = the project's declared + used classes, plus any given with --classes
+  CLASSES=[...new Set([...(d.class_options||[]), ...DEFAULT_CLASSES])];
   buildAddcls();
   outName=d.out_name||''; srcName=d.src_name||'';
   { const el=document.getElementById('savetgt');
@@ -41,9 +42,9 @@ async function load(keepIdx,keepSel){
     const n=document.getElementById('ovlnav'); if(n) n.style.display='none'; }
   for(const t in d.tracks){ cls[t]=d.tracks[t]; orig[t]=d.tracks[t]; }
   // next id for a NEW box = one past the max EXISTING number, so its displayed id (#N) never
-  // duplicates an existing vehicle's (previously new boxes always started at #0 -> collided).
+  // duplicates an existing object's (previously new boxes always started at #0 -> collided).
   newN=0; presentTids().forEach(t=>{const n=idNum(t); if(isFinite(n))newN=Math.max(newN,n+1);});
-  // next internal id for a NEW untracked box (wheel) = past the max existing "@uN"
+  // next internal id for a NEW untracked box = past the max existing "@uN"
   newU=0; frames.forEach(f=>f.regions.forEach(r=>{ if(isUntracked(r.tid)){const n=parseInt(String(r.tid).replace(/\D+/g,''),10); if(isFinite(n))newU=Math.max(newU,n+1);} }));
   const best={}; frames.forEach((f,k)=>f.regions.forEach(r=>{const a=r.box[2]*r.box[3];
     if(a>(best[r.tid]||-1)){best[r.tid]=a; repIdx[r.tid]=k;}}));
@@ -75,54 +76,34 @@ function redo(){ if(!redoStack.length)return; const s=redoStack.pop();
 function updBtns(){ document.getElementById('undo').disabled=!undoStack.length; document.getElementById('redo').disabled=!redoStack.length; }
 function frameURL(fn){ return '/frame?clip='+encodeURIComponent(clip)+'&f='+encodeURIComponent(fn); }
 function tcol(tid){ let h=0; for(const c of tid) h=(h*31+c.charCodeAt(0))%360; return 'hsl('+h+',85%,62%)'; }
-// colour by CLASS — a hand-picked palette of maximally-distinct colours so that even adjacent/
-// co-occurring classes (e.g. FHWA8 vs FHWA9) look obviously different while reviewing.
-// tuned distinct palette keyed by CLASS NUMBER (1..16) so colours are stable regardless of the label
-// text and adjacent classes (e.g. 8 vs 9) stay visually far apart. 16 = WHEEL (cyan, drawn dashed).
-const CLASS_COLORS={
-  '1':'#e6194b',   // red        (bike/motorcycle)
-  '2':'#4363d8',   // blue       (passenger car — most common)
-  '3':'#ffe119',   // yellow     (pickup)
-  '4':'#a9a9a9',   // grey       (bus)
-  '5':'#f032e6',   // magenta
-  '6':'#911eb4',   // purple
-  '7':'#3cb44b',   // green
-  '8':'#ffffff',   // white      (8 vs 9 -> white vs deep-teal: unmistakable)
-  '9':'#008080',   // deep teal
-  '10':'#f58231',  // orange
-  '11':'#bfef45',  // lime
-  '12':'#9a6324',  // brown
-  '13':'#ff1493',  // deep pink
-  '14':'#ffa500',  // amber      (pedestrian)
-  '15':'#00ff7f',  // spring green (pedestrian,cycle)
-  '16':'#00e5ff'   // cyan       (wheel; also drawn dashed)
-};
-function clscol(c){ return CLASS_COLORS[clsNum(c)]
-  || 'hsl('+Math.round((Math.max(0,CLASSES.indexOf(c)))*360/(CLASSES.length||1))+',80%,58%)'; }
-function isWheelClass(c){ return /wheel/i.test(String(c)); }   // "16_WHEEL" or legacy "WHEEL"
+// colour by CLASS POSITION in the class list, from a palette of maximally distinct colours
+// so neighbouring classes never look alike; past the palette, spread hues by the golden angle.
+const PALETTE=['#e6194b','#4363d8','#ffe119','#3cb44b','#f58231','#911eb4','#46f0f0','#f032e6',
+  '#bcf60c','#fabebe','#008080','#e6beff','#9a6324','#fffac8','#800000','#aaffc3','#808000',
+  '#ffd8b1','#000075','#a9a9a9'];
+function clscol(c){ const i=CLASSES.indexOf(c);
+  if(i<0) return '#9aa4ad';                                   // not in the list (e.g. NONE)
+  return i<PALETTE.length ? PALETTE[i] : 'hsl('+Math.round(i*137.508)%360+',75%,60%)'; }
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 // pick black/white label text by background luminance so labels stay readable on any colour
 function textOn(bg){ if(!bg||bg[0]!=='#'||bg.length<7) return '#0b0e11';
   const r=parseInt(bg.slice(1,3),16),g=parseInt(bg.slice(3,5),16),b=parseInt(bg.slice(5,7),16);
   return (0.299*r+0.587*g+0.114*b)/255>0.6 ? '#0b0e11' : '#fff'; }
-function boxcol(tid){ return tid===selected?'#ffd23f':clscol(cls[tid]||'FHWA2'); }
-// "@uN" ids mark untracked boxes (e.g. externally-added wheels with no track_id). They are drawn and
-// individually selectable/deletable, but kept OUT of the vehicle side-list (they are not tracks).
-// Untracked = wheels & any box without a real track_id. B-side wheels get a synthetic "@uN" id in
-// clipdata(); A-side (compare) boxes keep the raw "" / "?" from the JSON — treat all of these as untracked.
+function boxcol(tid){ return tid===selected?'#ffd23f':clscol(cls[tid]||'NONE'); }
+// "@uN" ids mark untracked boxes (no track_id in the JSON). They are drawn dashed and individually
+// selectable/deletable, but kept OUT of the object list (they are not tracks). B-side ones get a
+// synthetic "@uN" id in clipdata(); A-side (compare) boxes keep the raw "" / "?" — all are untracked.
 function isUntracked(t){ return t===''||t==='?'||t==null||(typeof t==='string' && t.startsWith('@u')); }
-function shortid(tid){ if(isUntracked(tid)) return isWheelClass(cls[tid])?'wheel':'untracked';
+function shortid(tid){ if(isUntracked(tid)) return 'untracked';
   return tid.includes('#')?'#'+tid.split('#').pop():tid; }
-// class number: "9_FIVE AXLE..." -> "9"; legacy "FHWA9" -> "9"; BIKE/PED/WHEEL -> 15/14/16.
-function clsNum(c){ c=String(c);
-  let m=c.match(/^(\d+)[_ ]/); if(m) return m[1];        // descriptive "9_..." label
-  m=c.match(/^FHWA(\d+)$/);    if(m) return m[1];        // legacy token
-  return ({BIKE:'15',PED:'14',WHEEL:'16',NONE:'?'}[c]||c); }
+// short class tag for the "123" toggle: its 1-based position in the class list
+function clsNum(c){ const i=CLASSES.indexOf(c); return i<0?'?':String(i+1); }
 function clsDisp(c){ return numMode?clsNum(c):c; }
 function toggleNum(){ numMode=!numMode; const b=document.getElementById('numbtn');
   if(b){ b.classList.toggle('on',numMode); b.textContent=numMode?'Abc':'123'; }
   renderList(); drawBoxes(); if(COMPARE) drawBoxesA(); }
-// a box's on-canvas label: untracked boxes (wheels) show only the class (no redundant id); tracked
-// vehicles show "id · class". Class respects the number toggle.
+// a box's on-canvas label: untracked boxes show only the class (no id); tracked
+// objects show "id · class". Class respects the number toggle.
 function boxLabel(tid){ return isUntracked(tid) ? clsDisp(cls[tid]) : (shortid(tid)+' · '+clsDisp(cls[tid])); }
 function natCmp(a,b){ // natural sort: compare digit runs numerically so #2 < #10 (no shuffle)
   const ax=String(a).match(/\d+|\D+/g)||[], bx=String(b).match(/\d+|\D+/g)||[];
@@ -149,40 +130,40 @@ function renderList(){
   const list=document.getElementById('list'); list.innerHTML='';
   const allTids=presentTids();
   // populate the class filter from classes present in THIS clip (preserve current selection)
-  const present=[...new Set(allTids.map(t=>cls[t]||'FHWA2'))].sort();
+  const present=[...new Set(allTids.map(t=>cls[t]||'NONE'))].sort(natCmp);
   if(classFilter && !present.includes(classFilter)) classFilter='';   // class no longer here -> reset
   const fsel=document.getElementById('clsfilter');
-  fsel.innerHTML='<option value="">All classes</option>'+present.map(c=>`<option>${c}</option>`).join('');
+  fsel.innerHTML='<option value="">All classes</option>'+present.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
   fsel.value=classFilter;
   // filter ONLY the list; the frame still draws every box (drawBoxes is unaffected)
-  const tids=classFilter?allTids.filter(t=>(cls[t]||'FHWA2')===classFilter):allTids;
+  const tids=classFilter?allTids.filter(t=>(cls[t]||'NONE')===classFilter):allTids;
   document.getElementById('vcount').textContent=classFilter
     ? '('+tids.length+' of '+allTids.length+')' : '('+allTids.length+')';
   // build the whole list as ONE innerHTML string (per-row createElement/appendChild + a closure
-  // each was ~1.3s for 7700 vehicles). Row click is handled by ONE delegated listener (see init).
+  // each was ~1.3s for 7700 objects). Row click is handled by ONE delegated listener (see init).
   // class shown as a compact TEXT label (not a per-row <select> — 7700 selects x18 options was the
   // ~1.3s cost). Click the label to edit it as a dropdown (one select exists at a time).
   let html='';
   for(const tid of tids){
-    if(!(tid in cls)) cls[tid]='FHWA2';
+    if(!(tid in cls)) cls[tid]='NONE';
     const s=cls[tid];
     const cl='vrow'+(tid===selected?' sel':'')+(s!==orig[tid]?' changed':'');
-    const a=tid.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    const a=esc(tid);
     const sw=clscol(s);
     html+='<div class="'+cl+'" data-tid="'+a+'"><span class="sw" style="background:'+sw+'"></span>'
-        +'<span class="vid">'+shortid(tid)+'</span>'
-        +'<span class="vcls" title="click to change class">'+clsDisp(s)+'</span></div>';
+        +'<span class="vid">'+esc(shortid(tid))+'</span>'
+        +'<span class="vcls" title="click to change class">'+esc(clsDisp(s))+'</span></div>';
   }
   list.innerHTML=html;
 }
 // turn a class label into a dropdown on click; revert to text after choosing (keeps DOM light)
 function editClass(span){
-  const row=span.closest('.vrow'); const tid=row.dataset.tid; const s=cls[tid]||'FHWA2';
+  const row=span.closest('.vrow'); const tid=row.dataset.tid; const s=cls[tid]||'NONE';
   const sel=document.createElement('select');
-  sel.innerHTML=CLASSES.map(c=>'<option'+(c===s?' selected':'')+'>'+c+'</option>').join('');
+  sel.innerHTML=CLASSES.map(c=>'<option value="'+esc(c)+'"'+(c===s?' selected':'')+'>'+esc(c)+'</option>').join('');
   sel.onclick=e=>e.stopPropagation();
   let done=false;
-  const finish=()=>{ if(done)return; done=true; span.textContent=cls[tid]||'FHWA2';
+  const finish=()=>{ if(done)return; done=true; span.textContent=clsDisp(cls[tid]||'NONE');
     row.classList.toggle('changed',cls[tid]!==orig[tid]); sel.replaceWith(span); };
   sel.onchange=()=>{ classChange(tid,sel.value); finish(); };
   sel.onblur=finish;
@@ -237,7 +218,7 @@ function gotoOverlap(dir){ if(!overlapIdx.length){ toast('no overlaps'); return;
   if(dir<0){ const pr=overlapIdx.filter(k=>k<idx); nx=pr.length?pr[pr.length-1]:null; }
   if(nx==null) nx = dir>0?overlapIdx[0]:overlapIdx[overlapIdx.length-1];
   go(nx); }
-/* ---- hide boxes on a frame (view only) + wheel drawing ---- */
+/* ---- hide boxes on a frame (view only) ---- */
 function isHidden(){ return frames[idx] && hidden.has(frames[idx].file); }
 function updateHideBtn(){ const b=document.getElementById('hidebtn'); if(!b)return;
   const h=isHidden(); b.textContent=h?'👁 Show boxes':'🙈 Hide boxes'; b.classList.toggle('on',h);
@@ -254,14 +235,14 @@ function drawBoxes(){
   const s=scale(), df=COMPARE?frameDiff(idx):null;
   const ovl=overlapOn?overlapRegions(idx):null;      // region indices in a high-IoU overlapping pair
   frames[idx].regions.forEach((r,ri)=>{
-    const isSel=r.tid===selected, hot=df&&df.bChanged.has(ri), wheel=isWheelClass(cls[r.tid]), isOvl=ovl&&ovl.has(ri);
+    const isSel=r.tid===selected, hot=df&&df.bChanged.has(ri), untr=isUntracked(r.tid), isOvl=ovl&&ovl.has(ri);
     const [x,y,ww,hh]=r.box, c=hot?HOT:boxcol(r.tid);
-    const d=document.createElement('div'); d.className='vbox'+(isSel?' sel':'')+(wheel?' wheel':''); d.dataset.ri=ri;
+    const d=document.createElement('div'); d.className='vbox'+(isSel?' sel':'')+(untr?' untracked':''); d.dataset.ri=ri;
     d.style.cssText+=`left:${x*s}px;top:${y*s}px;width:${ww*s}px;height:${hh*s}px;border-color:${c}`
-      +(wheel?';border-style:dashed;border-width:3px':'')
+      +(untr?';border-style:dashed':'')
       +(isOvl?';border-color:#ff3b3b;border-width:4px;box-shadow:0 0 0 2px #ff3b3b55;z-index:4':'')
       +(hot?';border-width:4px;opacity:1;z-index:3':(df&&!isSel?';opacity:.22':''));
-    d.innerHTML=`<span class=vlabel style="background:${c};color:${textOn(c)}">${wheel?'🛞 ':''}${boxLabel(r.tid)}</span>`;
+    d.innerHTML=`<span class=vlabel style="background:${c};color:${textOn(c)}">${esc(boxLabel(r.tid))}</span>`;
     if(isSel){ for(const cn of ['nw','ne','sw','se']){ const hd=document.createElement('div');
       hd.className='h '+cn; hd.onmousedown=(e)=>startDrag(e,ri,cn); d.appendChild(hd); } }
     // Single click+drag: if the cursor is inside the ALREADY-selected box, MOVE it (don't reselect —
@@ -276,7 +257,7 @@ function drawBoxes(){
     d.ondblclick=(e)=>{ if(addMode)return; e.stopPropagation();
       const ci=cycleAt(e);
       if(ci>=0){ const tid=frames[idx].regions[ci].tid; pick(tid,false);
-        toast('Selected '+shortid(tid)+' · '+cls[tid]+' — click-drag to move it'); } };
+        toast('Selected '+shortid(tid)+' · '+cls[tid]+' · drag to move it'); } };
     w.appendChild(d);
   });
 }
@@ -299,14 +280,12 @@ function pointInRegion(e,i){ const rg=frames[idx].regions[i]; if(!rg) return fal
 function selectedIdx(){ return selected!=null ? frames[idx].regions.findIndex(r=>r.tid===selected) : -1; }
 /* ---- compare mode: A (before) panel + frame diffing ---- */
 const HOT='#ff3bce';   // highlight color for a box that changed between A and B
-const WHEELCOL='#00e5ff';   // fixed, distinct colour for WHEEL boxes (dashed) — stands out from all classes
 // Compare A (before) vs B (after) on frame k — PRESENCE-ONLY diff: highlight a box ONLY when the
 // object exists in one file but not the other (added in B, or removed from A). A matched object
 // present in BOTH is NOT highlighted, even if its class or box was edited.
 //   • TRACKED objects (have a track_id) match by track_id.
-//   • UNTRACKED objects (wheels — no track_id) have no stable id, so they match by exact
-//     class+geometry (multiset): an identical wheel in both = present in both (not highlighted);
-//     a wheel only in one file = highlighted.
+//   • UNTRACKED objects (no track_id) have no stable id, so they match by exact class+geometry
+//     (multiset): an identical box in both = present in both; a box only in one file = highlighted.
 // Returns index sets for each panel (aChanged / bChanged) + added/removed counts.
 function _sig(cl,b){ return cl+'|'+b[0]+','+b[1]+','+b[2]+','+b[3]; }
 function frameDiff(k){
@@ -319,7 +298,7 @@ function frameDiff(k){
   B.forEach(r=>{ if(!isUntracked(r.tid)) bTids.add(r.tid); });
   B.forEach((r,i)=>{ if(!isUntracked(r.tid) && !aTids.has(r.tid)){ bChanged.add(i); add++; } });  // only in B
   A.forEach((r,i)=>{ if(!isUntracked(r.tid) && !bTids.has(r.tid)){ aChanged.add(i); del++; } });  // only in A
-  // ---- untracked (wheels): match by class+geometry (multiset) ----
+  // ---- untracked: match by class+geometry (multiset) ----
   const pool={};   // sig -> [aIdx, ...] still available to match
   A.forEach((r,i)=>{ if(isUntracked(r.tid)){ const key=_sig(r.cls,r.box); (pool[key]=pool[key]||[]).push(i); } });
   B.forEach((r,i)=>{ if(isUntracked(r.tid)){
@@ -336,13 +315,13 @@ function drawBoxesA(){
   const imA=document.getElementById('imgA'); if(!imA.naturalWidth)return;
   const s=imA.clientWidth/imA.naturalWidth, df=frameDiff(idx);
   (frames[idx].a||[]).forEach((r,i)=>{
-    const wheel=isWheelClass(r.cls), [x,y,ww,hh]=r.box, hot=df.aChanged.has(i), c=hot?HOT:clscol(r.cls);
-    const d=document.createElement('div'); d.className='vbox'+(wheel?' wheel':'');
+    const untr=isUntracked(r.tid), [x,y,ww,hh]=r.box, hot=df.aChanged.has(i), c=hot?HOT:clscol(r.cls);
+    const d=document.createElement('div'); d.className='vbox'+(untr?' untracked':'');
     d.style.cssText+=`left:${x*s}px;top:${y*s}px;width:${ww*s}px;height:${hh*s}px;border-color:${c};cursor:default;`
-      +(wheel?'border-style:dashed;border-width:3px;':'')
+      +(untr?'border-style:dashed;':'')
       +(hot?'border-width:4px;opacity:1;z-index:3':'opacity:.22');
     const lbl=isUntracked(r.tid)?clsDisp(r.cls):(shortid(r.tid)+' · '+clsDisp(r.cls));
-    d.innerHTML=`<span class=vlabel style="background:${c};color:${textOn(c)}">${wheel?'🛞 ':''}${lbl}</span>`;
+    d.innerHTML=`<span class=vlabel style="background:${c};color:${textOn(c)}">${esc(lbl)}</span>`;
     w.appendChild(d);
   });
 }
@@ -386,7 +365,7 @@ function showSel(){
 function buildIdOpts(){ const sel=document.getElementById('idsel');
   const others=presentTids().filter(t=>t!==selected);
   sel.innerHTML='<option value="">(keep own id)</option>'+
-    others.map(t=>`<option value="${t}">merge into ${shortid(t)}</option>`).join('');
+    others.map(t=>`<option value="${esc(t)}">merge into ${esc(shortid(t))}</option>`).join('');
   idselStale=false;
 }
 function classChange(tid,val){ pushUndo([]); cls[tid]=val; markRows(); drawBoxes(); refresh(); }
@@ -415,12 +394,12 @@ function reassignId(){ const sel=document.getElementById('idsel'); const to=sel.
   if(!to||to===selected){ return; }
   if(confirmMerge(to)) doMerge(to); else sel.value='';   // note + confirm before merging
 }
-function mergeTyped(){ if(!selected){ toast('Select a vehicle first'); return; }
+function mergeTyped(){ if(!selected){ toast('Select an object first'); return; }
   const raw=document.getElementById('idinput').value;
   const to=resolveTid(raw);
-  if(to===null){ toast('No vehicle with id "'+raw.trim()+'" on this dataset'); return; }
+  if(to===null){ toast('No object with id "'+raw.trim()+'" on this dataset'); return; }
   if(to==='AMBIG'){ toast('"'+raw.trim()+'" matches more than one — type the full id'); return; }
-  if(to===selected){ toast('That is the selected vehicle itself'); return; }
+  if(to===selected){ toast('That is the selected object itself'); return; }
   if(confirmMerge(to)) doMerge(to);
 }
 function dirtyCount(){ return Object.keys(cls).filter(t=>cls[t]!==orig[t]).length + edited.size; }
@@ -449,7 +428,7 @@ function toggleAdd(){
   document.getElementById('addbtn').classList.toggle('on',addMode);
   document.getElementById('wrap').classList.toggle('adding',addMode); }
 function deselect(){ if(!selected)return; selected=null; markSel(); showSel(); drawBoxes(); }
-// click ANYWHERE that isn't a box, a control, or the vehicle list -> unselect the current box.
+// click ANYWHERE that isn't a box, a control, or the object list -> unselect the current box.
 // (box/handle mousedown call stopPropagation, so a click ON a box never reaches this.)
 addEventListener('mousedown',e=>{ if(!selected||addMode)return;
   if(e.target.closest('.vbox,.vrow,.vcls,button,select,input,textarea,#selbar,#loader,#browser'))return;
@@ -468,26 +447,25 @@ addEventListener('mouseup',e=>{ if(!draw)return; const p=document.getElementById
   if(w<5||h<5)return;
   pushUndo([idx]);
   const box=clampBox([Math.round(x*s),Math.round(y*s),Math.round(w*s),Math.round(h*s)]);
-  const ncls=document.getElementById('addcls').value;
-  // a new WHEEL is UNTRACKED just like the wheels from the pipeline/file (no track_id, cyan, not in
-  // the vehicle list, saved with an empty track_id). Every other class gets a tracked "new#N" id.
-  const tid = isWheelClass(ncls) ? ('@u'+(newU++)) : ('new#'+(newN++));
+  const ncls=document.getElementById('addcls').value||'NONE';
+  // "untracked" boxes get no track_id (saved empty, dashed, not in the object list); others a "new#N" id
+  const tid = document.getElementById('adduntr').checked ? ('@u'+(newU++)) : ('new#'+(newN++));
   cls[tid]=ncls;
   frames[idx].regions.push({tid,box}); edited.add(frames[idx].file);
   selected=tid; invalidateTids(); renderList(); drawBoxes(); showSel(); refresh(); toast('Added '+ncls+' box'); });
 function deleteSelected(){ if(!selected)return;
   const regs=frames[idx].regions, i=regs.findIndex(r=>r.tid===selected);
-  if(i<0){ toast('This vehicle has no box on this frame'); return; }
+  if(i<0){ toast('This object has no box on this frame'); return; }
   pushUndo([idx]); regs.splice(i,1); edited.add(frames[idx].file); invalidateTids(); renderList(); drawBoxes(); showSel(); refresh(); toast('Deleted box on this frame'); }
-// delete a vehicle ENTIRELY — every box of this id across all frames (undoable via the same snapshot)
+// delete an object ENTIRELY — every box of this id across all frames (undoable via the same snapshot)
 function deleteTrack(){ if(!selected)return;
   const tid=selected, aff=framesWith(tid);
-  if(!aff.length){ toast('This vehicle has no boxes'); return; }
-  if(!confirm('Delete vehicle '+shortid(tid)+' from ALL '+aff.length+' frame(s)?\nThis removes every box of '+shortid(tid)+'. (Ctrl+Z to undo.)')) return;
+  if(!aff.length){ toast('This object has no boxes'); return; }
+  if(!confirm('Delete object '+shortid(tid)+' from ALL '+aff.length+' frame(s)?\nThis removes every box of '+shortid(tid)+'. (Ctrl+Z to undo.)')) return;
   pushUndo(aff);                                  // snapshot every affected frame -> full undo/redo
   aff.forEach(k=>{ frames[k].regions=frames[k].regions.filter(r=>r.tid!==tid); edited.add(frames[k].file); });
   selected=null; invalidateTids(); renderList(); drawBoxes(); showSel(); refresh();
-  toast('Deleted vehicle '+shortid(tid)+' from '+aff.length+' frame(s)'); }
+  toast('Deleted object '+shortid(tid)+' from '+aff.length+' frame(s)'); }
 addEventListener('keydown',e=>{
   const t=e.target.tagName;                       // never hijack keys while typing / in a dropdown
   if(t==='INPUT'||t==='SELECT'||t==='TEXTAREA'||e.target.isContentEditable){
@@ -578,7 +556,7 @@ async function doOpen(){
   if(loaderMode==='compare') body.compare_json=val('f_jsonA');
   const res=await (await fetch('/open',{method:'POST',body:JSON.stringify(body)})).json();
   if(!res.ok){ r.style.color='#ff6b6b'; r.textContent = res.error ? ('✗ '+res.error) : fmtReport(res.report||{errors:['open failed']}); return; }
-  const sel=document.getElementById('clipsel'); sel.innerHTML='<option>'+res.name+'</option>'; sel.value=res.name; clip=res.name;
+  const sel=document.getElementById('clipsel'); sel.innerHTML='<option>'+esc(res.name)+'</option>'; sel.value=res.name; clip=res.name;
   closeLoader(); await load(0,null);
 }
 
@@ -620,7 +598,7 @@ function toast(m){const t=document.getElementById('toast');t.textContent=m;t.sty
 // build the merge-into options only when the user actually opens the dropdown (fires before it renders)
 document.getElementById('idsel').addEventListener('mousedown',()=>{ if(idselStale) buildIdOpts(); });
 document.getElementById('idsel').addEventListener('focus',()=>{ if(idselStale) buildIdOpts(); });
-// ONE delegated click for the whole vehicle list (was a per-row closure x7700)
+// ONE delegated click for the whole object list (was a per-row closure x7700)
 document.getElementById('list').addEventListener('click',e=>{
   if(e.target.tagName==='SELECT'||e.target.closest('select')) return;   // let the class dropdown work
   if(e.target.classList.contains('vcls')){ e.stopPropagation(); editClass(e.target); return; }

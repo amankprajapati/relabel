@@ -16,15 +16,15 @@ import os
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
-from classdefs import CLASSES
 from clip import Clip
 from compare import COMPARE, clear_compare, load_compare, validate_pair
 from fsbrowse import listdir_info
 from render import render_index
 
 
-def make_handler(clips):
-    """Build a request handler bound to the mutable `clips` dict (name -> Clip)."""
+def make_handler(clips, default_classes=()):
+    """Build a request handler bound to the mutable `clips` dict (name -> Clip).
+    default_classes: classes from --classes, offered in addition to each project's own."""
     class H(BaseHTTPRequestHandler):
         def log_message(self, *_):
             pass
@@ -46,7 +46,7 @@ def make_handler(clips):
         def do_GET(self):
             u = urlparse(self.path); q = parse_qs(u.query)
             if u.path == "/":
-                self._send(200, "text/html; charset=utf-8", render_index(clips, CLASSES).encode())
+                self._send(200, "text/html; charset=utf-8", render_index(clips, list(default_classes)).encode())
             elif u.path == "/ls":                     # server-side directory browser
                 self._json(listdir_info(q.get("path", [""])[0]))
             elif u.path == "/clips":                  # current project list + compare flag
