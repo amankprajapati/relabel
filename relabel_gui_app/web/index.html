@@ -1,0 +1,111 @@
+<!doctype html><html><head><meta charset=utf-8><title>Relabel vehicles</title>
+<style>{{STYLE}}</style></head><body><div id=app>
+<header>
+  <b>Relabel vehicles</b>
+  <button class=ghost onclick=openLoader() title="Open a project / Compare two JSONs">📂 Open</button>
+  <select class=clip id=clipsel onchange=switchClip()>__CLIP_OPTIONS__</select>
+  <span class=muted id=stat></span>
+  <span class=muted id=savetgt title="Edits are written here — the original file is never modified" style="margin-left:10px"></span>
+  <span style=flex:1></span>
+  <span class=muted id=dirty></span>
+  <button id=undo class=ghost disabled onclick=undo() title="Undo (Ctrl+Z)">↶ Undo</button>
+  <button id=redo class=ghost disabled onclick=redo() title="Redo (Ctrl+Y)">↷ Redo</button>
+  <button id=save disabled onclick="save(true)" title="Save now to the edited file (also auto-saves)">Save changes</button>
+</header>
+<div id=body>
+  <div id=main>
+    <div id=stages style="flex:1;display:flex;min-height:0">
+      <div class=stage id=stageA style="display:none;position:relative;border-right:2px solid var(--line)">
+        <div style="position:absolute;top:6px;left:8px;z-index:5;font-size:.72rem;background:#7a1f2b;color:#fff;padding:2px 7px;border-radius:4px">GCP · before</div>
+        <div class=wrap id=wrapA><img id=imgA onload="zoomImg(this);drawBoxesA()"></div>
+      </div>
+      <div class=stage style="position:relative">
+        <div id=capB style="display:none;position:absolute;top:6px;left:8px;z-index:5;font-size:.72rem;background:#0a5d3a;color:#fff;padding:2px 7px;border-radius:4px">corrected · after (editable)</div>
+        <div class=wrap id=wrap><img id=img onload="zoomImg(this);drawBoxes()"></div>
+      </div>
+    </div>
+    <footer>
+      <button class=ghost onclick=step(-1)>◀</button>
+      <input type=range id=slider min=0 value=0 oninput=go(+this.value)>
+      <button class=ghost onclick=step(1)>▶</button>
+      <span class=muted id=counter></span>
+      <span class=divider></span>
+      <button class=ghost onclick=zoomBy(1/1.25) title="Zoom out (−)">🔍−</button>
+      <button class=ghost onclick=zoomReset() title="Reset zoom (0)"><span id=zoomlbl>100%</span></button>
+      <button class=ghost onclick=zoomBy(1.25) title="Zoom in (+). Scroll the wheel over the image to zoom at the cursor.">🔍+</button>
+      <span class=divider></span>
+      <button id=addbtn class=ghost onclick=toggleAdd()>✏️ Add box</button>
+      as <select id=addcls title="pick the class (WHEEL is in the list) then drag"></select>
+      <button id=hidebtn class=ghost onclick=toggleHide() title="Hide/show all boxes on THIS frame (view only). Useful when a box is misaligned with the vehicle.">🙈 Hide boxes</button>
+      <button id=numbtn class=ghost onclick=toggleNum() title="Toggle class labels between the full name (FHWA11) and the class number (11)">123</button>
+      <button id=ovlbtn class=ghost onclick=toggleOverlaps() title="Show only frames where two boxes overlap with IoU >= threshold (highlights the overlapping pair)">⿻ Overlaps</button>
+      <input id=ioth type=number value=0.95 step=0.01 min=0 max=1 style="width:62px" onchange=refreshOverlaps() title="IoU threshold">
+      <span id=ovlnav style="display:none;align-items:center;gap:6px">
+        <button class=ghost onclick=gotoOverlap(-1) title="previous overlap frame">◀</button>
+        <span class=muted id=ovlcount></span>
+        <button class=ghost onclick=gotoOverlap(1) title="next overlap frame">▶</button>
+      </span>
+      <span id=selbar>Selected <b id=selid></b> · merge into
+        <input id=idinput placeholder="type id e.g. 835" style="width:120px"
+          title="Type the target vehicle's id (short like 835 or the full id) and press Enter or Merge">
+        <button class=ghost onclick=mergeTyped()>Merge</button>
+        <select id=idsel onchange=reassignId() title="or pick from the list"></select>
+        <button class=ghost onclick=deleteSelected() title="Delete this box on THIS frame (Delete key)">🗑 Delete (frame)</button>
+        <button class=ghost onclick=deleteTrack() title="Delete this vehicle ENTIRELY — every box across all frames (Shift+Delete)">🗑 Delete ID</button></span>
+      <span id=diffnav style="display:none;align-items:center;gap:6px">
+        <span class=divider></span>
+        <button class=ghost onclick=gotoDiff(-1) title="previous changed frame">◀ diff</button>
+        <span class=muted id=diffcount></span>
+        <button class=ghost onclick=gotoDiff(1) title="next changed frame">diff ▶</button>
+      </span>
+    </footer>
+  </div>
+  <div id=side>
+    <div class=hd>Vehicles <span class=muted id=vcount></span></div>
+    <div id=filterbar style="padding:8px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;font-size:.8rem">
+      <span class=muted>Filter:</span>
+      <select id=clsfilter onchange=applyClassFilter() style="flex:1"
+        title="Show only this class in the list. Boxes on the frame are NOT affected."></select>
+    </div>
+    <div id=diffbar style="display:none;padding:8px 14px;border-bottom:1px solid var(--line)">
+      <b style="font-size:.82rem">Changed frames <span id=diffn class=muted></span></b>
+      <div id=difflist style="max-height:38vh;overflow:auto;margin-top:6px;font-size:.78rem"></div>
+    </div>
+    <div id=list></div>
+    <div class=hint>Click a vehicle to highlight &amp; jump to a clear frame; change its class (all frames).<br>
+      <b>Add:</b> Add box → pick class → drag. <b>Move/resize:</b> drag a box / its corner handles.<br>
+      <b>Overlapping / small box inside a big one:</b> double-click to select the box behind, then drag to move it.<br>
+      <b>Reassign ID:</b> select a box → pick an existing ID to merge. <b>Delete:</b> select → Delete.<br>
+      Then <b>Save changes</b>.</div>
+  </div>
+</div>
+</div><div id=toast></div>
+<div id=loader style="display:none;position:fixed;inset:0;background:#000b;z-index:100;align-items:center;justify-content:center">
+  <div style="background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:20px;width:660px;max-width:92vw;max-height:88vh;overflow:auto">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px"><b style="font-size:1.1rem">Open a project</b><span style=flex:1></span><button class=ghost onclick=closeLoader()>✕</button></div>
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <button id=m_single class=on onclick="setMode('single')">Review · 1 JSON</button>
+      <button id=m_compare class=ghost onclick="setMode('compare')">Compare · 2 JSONs</button></div>
+    <label class=muted>Frames folder</label>
+    <div style="display:flex;gap:6px;margin:4px 0 12px"><input id=f_frames style="flex:1" placeholder="/path/to/images  (blank = frames/ or images/ next to the JSON)"><button class=ghost onclick="browse('f_frames',true)">Browse…</button></div>
+    <label class=muted id=lab_jsonB>Annotation JSON</label>
+    <div style="display:flex;gap:6px;margin:4px 0 12px"><input id=f_jsonB style="flex:1" placeholder="/path/to/combined_via.json"><button class=ghost onclick="browse('f_jsonB',false)">Browse…</button></div>
+    <div id=row_jsonA style="display:none">
+      <label class=muted>Original JSON (before / GCP) — A</label>
+      <div style="display:flex;gap:6px;margin:4px 0 12px"><input id=f_jsonA style="flex:1" placeholder="/path/to/combined_via.ORIGINAL.json"><button class=ghost onclick="browse('f_jsonA',false)">Browse…</button></div></div>
+    <div id=f_report style="font-size:.82rem;margin:6px 0;white-space:pre-wrap;line-height:1.5"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+      <button id=btnCheck class=ghost style="display:none" onclick=doCheck()>Check compatibility</button>
+      <button onclick=doOpen()>Open</button></div>
+  </div>
+</div>
+<div id=browser style="display:none;position:fixed;inset:0;background:#000b;z-index:110;align-items:center;justify-content:center">
+  <div style="background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;width:640px;max-width:92vw;height:70vh;display:flex;flex-direction:column">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><button class=ghost onclick=lsUp()>⬆ Up</button>
+      <code id=b_path style="flex:1;font-size:.76rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl;text-align:left"></code>
+      <button id=b_usefolder class=ghost style="display:none" onclick=useFolder()>✓ Use this folder</button>
+      <button class=ghost onclick=closeBrowser()>✕</button></div>
+    <div id=b_list style="flex:1;overflow:auto;border:1px solid var(--line);border-radius:6px"></div>
+  </div>
+</div>
+<script>{{SCRIPT}}</script></body></html>
