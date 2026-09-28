@@ -34,6 +34,12 @@ from compare import load_compare
 from server import make_handler
 
 
+class Server(ThreadingHTTPServer):
+    # On Windows SO_REUSEADDR lets a second process bind a port that is already in use,
+    # so launching twice would silently run two servers on one port. Fail loudly instead.
+    allow_reuse_address = os.name != "nt"
+
+
 def build_arg_parser():
     ap = argparse.ArgumentParser(description="Relabel: review and correct tracked box annotations")
     ap.add_argument("path", nargs="?", default=None,
@@ -59,8 +65,12 @@ def main(argv=None):
         sys.exit(f"no clips (folders with *_via.json + frames/) found under {args.path}")
     print(f"loaded {len(clips)} clip(s)" + (": " + ", ".join(clips) if clips else " — use 'Open' in the GUI"))
     url = f"http://localhost:{args.port}"
+    try:
+        srv = Server((args.host, args.port), make_handler(clips, parse_classes_arg(args.classes)))
+    except OSError:
+        sys.exit(f"port {args.port} is already in use. Relabel may already be running: open {url}, "
+                 f"or start another copy with --port {args.port + 1}")
     print(f"open {url}  (Ctrl-C to stop)")
-    srv = ThreadingHTTPServer((args.host, args.port), make_handler(clips, parse_classes_arg(args.classes)))
     if not args.no_browser:                              # auto-open a browser (nice on Windows double-click)
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
     try:

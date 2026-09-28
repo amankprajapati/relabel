@@ -49,23 +49,30 @@ other, and from then on it behaves as a single object.
 
 ## Quick start
 
-Requires Python 3.8 or newer.
+Requires Python 3.8 or newer. Clone the repository, then run the launcher for your system:
 
 ```bash
-python make_sample.py sample_data                # a small tracked demo project
-python -m relabel_gui_app sample_data            # run from the repository root; opens your browser
+git clone https://github.com/amankprajapati/relabel.git
+cd relabel
+./run.sh --demo                 # Linux / macOS / Git Bash
+run.bat --demo                  # Windows (or double-click run.bat)
 ```
 
-To try the tracker, generate detector-style boxes (no track ids, with scores) and press **Track**:
+The first run creates a local `.venv` and installs the tracker's dependencies (`numpy`, `scipy`).
+Every later run finds them already installed, skips the download and starts straight away.
+`--demo` generates two small demo projects (once) and opens them in your browser:
+
+- **tracked**: objects that already have track ids. Try changing classes, merging ids and editing boxes.
+- **detections**: raw detector-style boxes with scores but no ids. Press **Track** to link them.
+
+To open your own data, pass its folder, plus any of the options below:
 
 ```bash
-pip install numpy                                # only needed for tracking
-python make_sample.py sample_dets --detections
-python -m relabel_gui_app sample_dets
+./run.sh path/to/project --classes car,person,bicycle
 ```
 
-You can also start with no folder (`python -m relabel_gui_app`) and pick a JSON and a frames folder
-from the **Open** dialog.
+Or start with no folder (`./run.sh`) and pick a JSON and a frames folder in the **Open** dialog.
+Without the launchers: `pip install -r requirements.txt`, then `python -m relabel_gui_app FOLDER`.
 
 ## Command line
 
@@ -159,6 +166,8 @@ relabel_gui_app/
   utils.py       natural sort
   web/           index.html, style.css, app.js: the whole user interface
 make_sample.py   synthetic demo projects
+run.sh, run.bat  set up .venv on first run (skipped afterwards) and launch
+requirements.txt numpy + scipy, used only by the tracker
 tests/           tracker tests:  python -m unittest discover tests
 ```
 
