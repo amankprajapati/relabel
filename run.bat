@@ -22,9 +22,9 @@ echo Creating virtual environment in .venv ...
 %SYS_PY% -m venv .venv || (pause & exit /b 1)
 
 :deps
-"%PY%" -c "import numpy, scipy" >nul 2>&1
+"%PY%" -c "import numpy, scipy, anthropic" >nul 2>&1
 if errorlevel 1 (
-  echo Installing dependencies ^(numpy, scipy^) ...
+  echo Installing dependencies ^(numpy, scipy, anthropic^) ...
   "%PY%" -m pip install --disable-pip-version-check -q -r requirements.txt || (pause & exit /b 1)
 ) else (
   echo Dependencies already installed, skipping download.

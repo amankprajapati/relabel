@@ -4,7 +4,7 @@
 #   ./run.sh [FOLDER] [options]     open a project folder (same options as python -m relabel_gui_app)
 #   ./run.sh --demo                 open the bundled street-crossing example
 #
-# First run: creates .venv and installs numpy + scipy (used by the tracker).
+# First run: creates .venv and installs numpy + scipy (tracker) and anthropic (Ask AI).
 # Later runs: finds everything already installed and starts straight away.
 set -euo pipefail
 
@@ -32,10 +32,10 @@ else
   if [ -x "$VENV/bin/python" ]; then PY="$VENV/bin/python"; else PY="$VENV/Scripts/python.exe"; fi
 fi
 
-if "$PY" -c 'import numpy, scipy' >/dev/null 2>&1; then
+if "$PY" -c 'import numpy, scipy, anthropic' >/dev/null 2>&1; then
   echo "Dependencies already installed, skipping download."
 else
-  echo "Installing dependencies (numpy, scipy) ..."
+  echo "Installing dependencies (numpy, scipy, anthropic) ..."
   "$PY" -m pip install --disable-pip-version-check -q -r requirements.txt
 fi
 

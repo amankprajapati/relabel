@@ -2,3 +2,5 @@
 # The tracker needs numpy; scipy gives it optimal matching (it falls back to greedy without it).
 numpy>=1.20
 scipy>=1.6
+# "Ask AI" with the Claude API (the Claude Code and Codex options use their own CLIs instead).
+anthropic>=1.0
