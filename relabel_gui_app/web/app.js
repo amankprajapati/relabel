@@ -194,9 +194,11 @@ function go(i){ idx=Math.max(0,Math.min(frames.length-1,i|0));
   updateHideBtn(); }
 function step(d){ go(idx+d); }
 /* ---- zoom (resize the displayed image; boxes recompute from clientWidth so they stay aligned) ---- */
-function zoomImg(im){ if(!im)return;
-  im.style.width=''; im.style.maxWidth=''; im.style.maxHeight='';   // revert to CSS fit, then measure it
-  if(zoom!==1){ const bw=im.clientWidth; im.style.maxWidth='none'; im.style.maxHeight='none'; im.style.width=(bw*zoom)+'px'; } }
+// 100% = the frame fitted to its panel (scaled up or down, aspect kept); zoom multiplies that
+function zoomImg(im){ if(!im||!im.naturalWidth) return;
+  const st=im.closest('.stage'), pad=16;
+  const fit=Math.min((st.clientWidth-pad)/im.naturalWidth, (st.clientHeight-pad)/im.naturalHeight);
+  im.style.width=Math.max(1,Math.round(im.naturalWidth*fit*zoom))+'px'; }
 function applyZoom(){ zoom=Math.max(0.25,Math.min(6,zoom));
   zoomImg(img()); zoomImg(document.getElementById('imgA'));
   drawBoxes(); if(COMPARE) drawBoxesA();
@@ -241,7 +243,7 @@ function toggleHide(){ if(!frames[idx])return;
   toast(isHidden()?'Boxes hidden on this frame':'Boxes shown'); }
 function drawBoxes(){
   const w=document.getElementById('wrap'); w.querySelectorAll('.vbox:not(.preview)').forEach(e=>e.remove());
-  if(isHidden()) return;                 // boxes hidden on this frame: draw nothing (positions untouched)
+  if(isHidden()){ positionPopover(); return; }   // boxes hidden on this frame: draw nothing
   const s=scale(), df=COMPARE?frameDiff(idx):null;
   const ovl=overlapOn?overlapRegions(idx):null;      // region indices in a high-IoU overlapping pair
   frames[idx].regions.forEach((r,ri)=>{
@@ -270,6 +272,7 @@ function drawBoxes(){
         toast('Selected '+shortid(tid)+' · '+cls[tid]+' · drag to move it'); } };
     w.appendChild(d);
   });
+  positionPopover();
 }
 // region indices whose box contains the cursor, front-most first (higher array index paints on top)
 function regionsAt(e){
@@ -366,13 +369,47 @@ function pick(tid, jump=true){
 function showSel(){
   const bar=document.getElementById('selbar'); if(!selected){bar.style.display='none';return;}
   bar.style.display='flex'; document.getElementById('selid').textContent=shortid(selected);
+  syncSelectedClass();
   if(selected!==aiFor) clearAI();
   // don't build the (potentially thousands-long) merge dropdown here — that made every click lag.
   // reset it to just the placeholder and mark it stale; buildIdOpts() fills it on first open.
   document.getElementById('idsel').innerHTML='<option value="">(merge into… )</option>';
   idselStale=true;
   const inp=document.getElementById('idinput'); if(inp) inp.value='';
+  positionPopover();
 }
+/* ---- floating panel for the selected box: beside it, flipped to stay inside the image area ---- */
+function syncSelectedClass(){ if(!selected) return;
+  const c=cls[selected]||'NONE', sel=document.getElementById('selcls');
+  const opts=CLASSES.includes(c)?CLASSES:[c,...CLASSES];
+  sel.innerHTML=opts.map(o=>'<option value="'+esc(o)+'">'+esc(o)+'</option>').join('');
+  sel.value=c; document.getElementById('selsw').style.background=clscol(c); }
+function setSelectedClass(c){ document.getElementById('selcls').blur();
+  if(!selected||cls[selected]===c) return;
+  classChange(selected,c); toast(shortid(selected)+' → '+c+(isUntracked(selected)?'':' (all frames)')); }
+function positionPopover(){
+  const pop=document.getElementById('selbar');
+  if(!selected||pop.style.display==='none') return;
+  const box=document.querySelector('#wrap .vbox.sel'), stage=document.getElementById('wrap').closest('.stage').getBoundingClientRect();
+  const area={l:Math.max(stage.left,0)+8, t:Math.max(stage.top,0)+8,
+              r:Math.min(stage.right,innerWidth)-8, b:Math.min(stage.bottom,innerHeight)-8};
+  const w=pop.offsetWidth, h=pop.offsetHeight, gap=10;
+  const clampX=x=>Math.max(area.l,Math.min(x,area.r-w)), clampY=y=>Math.max(area.t,Math.min(y,area.b-h));
+  document.getElementById('selnote').style.display=box?'none':'block';
+  let x, y;
+  if(!box){ x=area.r-w; y=area.t; }                     // object not on this frame: dock in the corner
+  else {
+    const b=box.getBoundingClientRect();
+    const lowerHalf=(b.top+b.bottom)/2>(area.t+area.b)/2;
+    const besideY=clampY(lowerHalf?b.bottom-h:b.top);    // low boxes: grow upward, so it sits above
+    if(b.right+gap+w<=area.r){ x=b.right+gap; y=besideY; }            // right of the box
+    else if(b.left-gap-w>=area.l){ x=b.left-gap-w; y=besideY; }       // box near the right edge: left
+    else if(!lowerHalf&&b.bottom+gap+h<=area.b){ x=clampX(b.left); y=b.bottom+gap; }   // wide box: below
+    else if(b.top-gap-h>=area.t){ x=clampX(b.left); y=b.top-gap-h; }  // ...or above
+    else { x=clampX(b.right+gap); y=clampY(b.top); }                  // no room anywhere: overlap, stay visible
+  }
+  pop.style.left=Math.round(x)+'px'; pop.style.top=Math.round(y)+'px'; }
+document.querySelectorAll('.stage').forEach(s=>s.addEventListener('scroll',positionPopover));
 function buildIdOpts(){ const sel=document.getElementById('idsel');
   const others=presentTids().filter(t=>t!==selected);
   sel.innerHTML='<option value="">(keep own id)</option>'+
@@ -385,6 +422,7 @@ function classChange(tid,val){
   pushUndo(fr); cls[tid]=val; fr.forEach(k=>edited.add(frames[k].file));
   const row=document.querySelector(`.vrow[data-tid="${tid.replace(/"/g,'\\"')}"]`);
   if(row){ row.querySelector('.sw').style.background=clscol(val); const v=row.querySelector('.vcls'); if(v) v.textContent=clsDisp(val); }
+  if(tid===selected) syncSelectedClass();
   markRows(); drawBoxes(); refresh(); }
 // hotkey 1..9: re-class the selected object everywhere, or (nothing selected) pick the new-box class
 function hotkeyClass(n){ const c=CLASSES[n-1]; if(c==null){ toast('No class '+n+' (open Classes to add one)'); return; }
@@ -562,7 +600,7 @@ function togglePlay(){ if(playTimer){ stopPlay(); return; }
                         1000/(+document.getElementById('fps').value||10));
   document.getElementById('playico').setAttribute('href','#i-pause'); }
 document.getElementById('stages').addEventListener('mousedown',stopPlay);
-addEventListener('resize',()=>{ if(!drag&&!draw){ if(zoom!==1) applyZoom(); else drawBoxes(); } });
+addEventListener('resize',()=>{ if(!drag&&!draw) applyZoom(); });   // re-fit the frame to the new size
 // mouse-wheel over the image zooms, ANCHORED at the cursor (scroll up = in, down = out).
 document.getElementById('stages').addEventListener('wheel',e=>{
   const st=e.target.closest('.stage'); if(!st)return;
@@ -661,7 +699,7 @@ function renderClasses(){ const L=document.getElementById('clslist'); if(!L)retu
       +'<button class="ghost small danger" data-act="del" title="delete class">✕</button></div>'; }).join('')
     || '<div class="muted" style="padding:10px">No classes yet. Add one below.</div>';
 }
-function classesChanged(msg){ classesDirty=true; invalidateTids(); buildAddcls(true); renderClasses();
+function classesChanged(msg){ classesDirty=true; invalidateTids(); buildAddcls(true); renderClasses(); syncSelectedClass();
   renderList(); drawBoxes(); if(COMPARE) drawBoxesA(); refresh(); if(msg) toast(msg); }
 function addClass(){ const inp=document.getElementById('newcls'); const name=inp.value.trim();
   if(!name) return;
@@ -805,7 +843,8 @@ async function loadAdvisors(){
 function chooseAdvisor(id){ try{ localStorage.setItem('relabel-advisor',id); }catch(e){}
   document.getElementById('aisel').blur(); clearAI(); }
 function clearAI(){ aiToken++; aiFor=selected; showAI('',''); }
-function showAI(kind,html){ const o=document.getElementById('aiout'); o.className='aiout'+(kind?' '+kind:''); o.innerHTML=html; }
+function showAI(kind,html){ const o=document.getElementById('aiout'); o.className='aiout'+(kind?' '+kind:''); o.innerHTML=html;
+  positionPopover(); }                                   // the panel's height changed
 // the box with a margin (small boxes upscaled so the model sees detail) + the frame with the box outlined
 function boxImages(){ const im=img(), i=selectedIdx();
   if(i<0||!im.complete||!im.naturalWidth) return null;

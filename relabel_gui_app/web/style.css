@@ -82,7 +82,7 @@ select.clip{max-width:260px}
 #fps{padding:5px 6px}
 .keys th{text-align:left;padding:10px 6px 4px;font-size:.78rem;color:var(--muted);font-weight:600}
 .tlabel{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:.84rem}
-.wrap img{max-height:calc(100vh - 150px);max-width:100%;width:auto;display:block}
+.wrap img{display:block;max-width:none}
 .vbox{position:absolute;border:2px solid #fff;box-sizing:border-box;opacity:.75;cursor:move}
 .vbox.sel{opacity:1;border-width:3px}
 .vbox.preview{opacity:1;border:2px dashed var(--hi);pointer-events:none;cursor:crosshair}
@@ -100,11 +100,16 @@ select.clip{max-width:260px}
 .search{position:relative;flex:1;min-width:0}
 .search .i{position:absolute;left:8px;top:50%;transform:translateY(-50%);color:var(--muted)}
 .search input{width:100%;padding-left:28px}
-.card{margin:10px 12px 4px;padding:10px;border:1px solid var(--accent);border-radius:8px;
-  background:color-mix(in srgb,var(--accent) 10%,var(--panel));flex-direction:column;gap:8px}
-.cardhead{font-size:.86rem}.cardhead b{font-family:ui-monospace,Consolas,monospace;color:var(--hi);margin-left:4px}
-.card select{width:100%}
-.card .row button{flex:1;justify-content:center}
+.popover{position:fixed;z-index:50;width:300px;max-width:calc(100vw - 16px);padding:10px 12px 12px;
+  background:var(--panel);border:1px solid var(--accent);border-radius:10px;box-shadow:var(--shadow);
+  flex-direction:column;gap:8px;font-size:.86rem}
+.pophead{display:flex;align-items:center;gap:8px}.pophead b{font-family:ui-monospace,Consolas,monospace;color:var(--hi)}
+.pophead .sw{width:12px;height:12px;border-radius:3px;flex-shrink:0}
+.poprow{display:flex;align-items:center;gap:6px}
+.poprow>span{width:46px;color:var(--muted);font-size:.8rem;flex-shrink:0}
+.poprow select,.poprow input{flex:1;min-width:0}
+.popover>select{width:100%}
+.popfoot button{flex:1;justify-content:center}
 #list{overflow:auto;flex:1}
 #diffbar{border-bottom:1px solid var(--line)}
 #difflist{max-height:32vh;overflow:auto;font-size:.8rem}

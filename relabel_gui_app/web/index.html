@@ -81,7 +81,7 @@
       <span class=spacer></span>
       <div class=group>
         <button class="btn icon" onclick=zoomBy(1/1.25) title="Zoom out (-)" aria-label="Zoom out"><svg class=i><use href="#i-zout"/></svg></button>
-        <button class="btn zoom" onclick=zoomReset() title="Reset zoom (0). Scroll over the image to zoom at the cursor."><span id=zoomlbl>100%</span></button>
+        <button class="btn zoom" onclick=zoomReset() title="Fit the frame to the window (0). Scroll over the image to zoom at the cursor."><span id=zoomlbl>100%</span></button>
         <button class="btn icon" onclick=zoomBy(1.25) title="Zoom in (+)" aria-label="Zoom in"><svg class=i><use href="#i-zin"/></svg></button>
       </div>
     </div>
@@ -115,26 +115,6 @@
   </main>
 
   <aside id=side>
-    <section id=selbar class=card style="display:none">
-      <div class=cardhead>Selected <b id=selid></b></div>
-      <div class=row>
-        <input id=idinput placeholder="Merge into id, e.g. 835" title="Type the target object's id and press Enter">
-        <button class=btn onclick=mergeTyped()>Merge</button>
-      </div>
-      <select id=idsel onchange=reassignId() title="Or pick the object to merge into"></select>
-      <div class=row>
-        <button class="btn danger" onclick=deleteSelected() title="Delete this box on this frame only (Delete)"><svg class=i><use href="#i-trash"/></svg>This frame</button>
-        <button class="btn danger" onclick=deleteTrack() title="Delete every box of this object (Shift+Delete)"><svg class=i><use href="#i-trash"/></svg>All frames</button>
-      </div>
-      <div class=muted style="font-size:.74rem">Keys 1-9 set its class on every frame.</div>
-      <div class=ai>
-        <div class=row>
-          <button id=aibtn class=btn onclick=askAI() title="Ask an AI model which class this box is (A)"><svg class=i><use href="#i-spark"/></svg>Ask AI</button>
-          <select id=aisel onchange="chooseAdvisor(this.value)" title="Which AI to ask" aria-label="AI advisor"></select>
-        </div>
-        <div id=aiout class=aiout role=status></div>
-      </div>
-    </section>
     <div class=sidehead>Objects <span class=muted id=vcount></span></div>
     <div class=filters>
       <div class=search><svg class=i><use href="#i-search"/></svg><input id=vsearch placeholder="Find id" oninput=renderList() aria-label="Find object by id"></div>
@@ -149,6 +129,32 @@
 </div>
 </div>
 <div id=toast role=status></div>
+
+<section id=selbar class=popover style="display:none" role=dialog aria-label="Selected object">
+  <div class=pophead>
+    <span class=sw id=selsw></span><b id=selid></b>
+    <span class=spacer></span>
+    <button class="btn icon small" onclick=deselect() title="Close (Esc)" aria-label=Close><svg class=i><use href="#i-x"/></svg></button>
+  </div>
+  <div id=selnote class=muted style="display:none">Not on this frame</div>
+  <label class=poprow><span>Class</span>
+    <select id=selcls onchange="setSelectedClass(this.value)" title="Changes the class on every frame of this object (keys 1-9)"></select></label>
+  <div class=poprow><span>Merge</span>
+    <input id=idinput placeholder="into id, e.g. 835" title="Type the target object's id and press Enter">
+    <button class=btn onclick=mergeTyped()>Merge</button></div>
+  <select id=idsel onchange=reassignId() title="Or pick the object to merge into"></select>
+  <div class=ai>
+    <div class=row>
+      <button id=aibtn class=btn onclick=askAI() title="Ask an AI model which class this box is (A)"><svg class=i><use href="#i-spark"/></svg>Ask AI</button>
+      <select id=aisel onchange="chooseAdvisor(this.value)" title="Which AI to ask" aria-label="AI advisor"></select>
+    </div>
+    <div id=aiout class=aiout role=status></div>
+  </div>
+  <div class="row popfoot">
+    <button class="btn danger small" onclick=deleteSelected() title="Delete this box on this frame only (Delete)"><svg class=i><use href="#i-trash"/></svg>This frame</button>
+    <button class="btn danger small" onclick=deleteTrack() title="Delete every box of this object (Shift+Delete)"><svg class=i><use href="#i-trash"/></svg>All frames</button>
+  </div>
+</section>
 
 <div id=loader class=modal style="display:none">
   <div class="dialog wide">

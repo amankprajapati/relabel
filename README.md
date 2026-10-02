@@ -38,6 +38,8 @@ other, and from then on it behaves as a single object.
 - **Ask AI.** Not sure what a box is? Select it and press <kbd>A</kbd>: Claude (API or Claude Code) or
   OpenAI Codex names the class from your list with a one-line reason, and **Apply** relabels the
   whole track. No screenshots or copy-pasting into a chat.
+- **Edit beside the box.** Clicking a box opens a small panel next to it (flipping left or upward
+  near the edges) to change its class, merge its id, ask AI or delete it.
 - **Fix track ids.** Merge two ids into one, or delete an object on one frame or on all frames.
 - **Annotate like VIA.** Drag on the image to draw a box, click to select, drag to move, pull a corner
   to resize. Copy a box and paste it onto frames where it is missing: it keeps its track id.
@@ -135,7 +137,7 @@ The whole run is a single undo step.
 
 Select a box and press **Ask AI** (or <kbd>A</kbd>). The browser crops the box with some margin,
 plus a small copy of the whole frame with the box outlined, and the local server asks the AI you
-picked to choose one class from your list. The answer appears in the *Selected* card as the class
+picked to choose one class from your list. The answer appears in the panel beside the box as the class
 and a one-line reason; **Apply** sets that class on every frame of the track. Nothing changes
 until you press it.
 
@@ -153,7 +155,7 @@ and only when you ask.
 ## Keyboard
 
 Mouse: drag on an empty part of the image to draw a box (<kbd>Ctrl</kbd>+drag to start on top of
-another box), click a box to select it, drag it to move, drag a corner to resize, double-click to
+another box), click a box to select it and open its panel, drag it to move, drag a corner to resize, double-click to
 reach a box behind another, scroll to zoom.
 
 | Key | Action |
