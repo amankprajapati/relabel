@@ -31,6 +31,7 @@ import webbrowser
 from classdefs import parse_classes_arg
 from clip import discover
 from compare import load_compare
+from advisors import AdvisorRegistry, default_advisors
 from server import make_handler
 
 
@@ -66,7 +67,8 @@ def main(argv=None):
     print(f"loaded {len(clips)} clip(s)" + (": " + ", ".join(clips) if clips else " — use 'Open' in the GUI"))
     url = f"http://localhost:{args.port}"
     try:
-        srv = Server((args.host, args.port), make_handler(clips, parse_classes_arg(args.classes)))
+        srv = Server((args.host, args.port), make_handler(clips, parse_classes_arg(args.classes),
+                                                        AdvisorRegistry(default_advisors())))
     except OSError:
         sys.exit(f"port {args.port} is already in use. Relabel may already be running: open {url}, "
                  f"or start another copy with --port {args.port + 1}")

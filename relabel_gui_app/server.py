@@ -10,13 +10,18 @@ Routes
   POST /validate  -> pre-compare A/B compatibility check        (compare.validate_pair)
   POST /open      -> open a project (single or compare) chosen in the GUI
   POST /track     -> link boxes into tracks with ByteTrack        (tracker.run)
+  GET  /advisors  -> AI class advisors and whether each is set up (advisors.AdvisorRegistry)
+  POST /suggest   -> ask one advisor which class a box crop is      (Advisor.suggest)
 """
+import base64
+import binascii
 import json
 import mimetypes
 import os
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
+from advisors import AdviceRequest, AdvisorError
 from clip import Clip
 from compare import COMPARE, clear_compare, load_compare, validate_pair
 from fsbrowse import listdir_info
@@ -24,9 +29,23 @@ from render import render_index
 import tracker
 
 
-def make_handler(clips, default_classes=()):
+MAX_BODY = 25 * 1024 * 1024          # requests carry at most two JPEGs; reject anything larger
+
+
+def decode_image(value):
+    """A base64 JPEG, optionally as a data: URL, from the browser -> bytes (None if absent)."""
+    if not value:
+        return None
+    try:
+        return base64.b64decode(value.split(",", 1)[-1], validate=True)
+    except (binascii.Error, ValueError):
+        raise AdvisorError("The image sent by the browser was not valid base64.")
+
+
+def make_handler(clips, default_classes=(), advisors=None):
     """Build a request handler bound to the mutable `clips` dict (name -> Clip).
-    default_classes: classes from --classes, offered in addition to each project's own."""
+    default_classes: classes from --classes, offered in addition to each project's own.
+    advisors: an AdvisorRegistry for "Ask AI" (None disables the feature)."""
     class H(BaseHTTPRequestHandler):
         def log_message(self, *_):
             pass
@@ -43,7 +62,21 @@ def make_handler(clips, default_classes=()):
 
         def _body(self):
             n = int(self.headers.get("Content-Length", 0))
+            if n > MAX_BODY:
+                raise ValueError("request too large")
             return json.loads(self.rfile.read(n) or b"{}")
+
+        def _suggest(self, body):
+            if advisors is None:
+                raise AdvisorError("Ask AI is not enabled on this server.")
+            crop = decode_image(body.get("crop"))
+            if not crop:
+                raise AdvisorError("No image of the box was sent.")
+            request = AdviceRequest(crop_jpeg=crop, context_jpeg=decode_image(body.get("context")),
+                                    classes=[str(c) for c in body.get("classes") or []],
+                                    current_class=str(body.get("current") or ""))
+            s = advisors.get(str(body.get("advisor") or "")).suggest(request)
+            return {"ok": True, "class": s.cls, "reason": s.reason, "in_list": s.in_list}
 
         def do_GET(self):
             u = urlparse(self.path); q = parse_qs(u.query)
@@ -51,6 +84,8 @@ def make_handler(clips, default_classes=()):
                 self._send(200, "text/html; charset=utf-8", render_index(clips, list(default_classes)).encode())
             elif u.path == "/ls":                     # server-side directory browser
                 self._json(listdir_info(q.get("path", [""])[0]))
+            elif u.path == "/advisors":               # AI class advisors + setup status
+                self._json({"advisors": advisors.describe() if advisors else []})
             elif u.path == "/clips":                  # current project list + compare flag
                 self._json({"clips": list(clips), "compare": COMPARE["on"]})
             elif u.path == "/clipdata":
@@ -89,6 +124,13 @@ def make_handler(clips, default_classes=()):
                     self._json({"ok": True, **res})
                 except Exception as e:
                     self._json({"ok": False, "error": str(e)})
+            elif p == "/suggest":                     # "Ask AI": which class is this box?
+                try:
+                    self._json(self._suggest(self._body()))
+                except AdvisorError as e:
+                    self._json({"ok": False, "error": str(e)})
+                except ValueError as e:
+                    self._json({"ok": False, "error": f"Bad request: {e}"}, 400)
             elif p == "/validate":                    # check two jsons BEFORE comparing
                 b = self._body()
                 self._json(validate_pair(b.get("json_a", ""), b.get("json_b", ""), b.get("frames_dir", "")))

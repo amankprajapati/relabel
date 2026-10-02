@@ -10,11 +10,11 @@ if exist "%PY%" goto deps
 set "SYS_PY="
 for %%P in (py python python3) do (
   if not defined SYS_PY (
-    %%P -c "import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)" >nul 2>&1 && set "SYS_PY=%%P"
+    %%P -c "import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)" >nul 2>&1 && set "SYS_PY=%%P"
   )
 )
 if not defined SYS_PY (
-  echo Python 3.8 or newer is required: https://www.python.org/downloads/
+  echo Python 3.10 or newer is required: https://www.python.org/downloads/
   pause
   exit /b 1
 )

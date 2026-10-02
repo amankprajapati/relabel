@@ -14,7 +14,7 @@ VENV=.venv
 find_python() {
   for py in python3 python py; do
     if command -v "$py" >/dev/null 2>&1 &&
-       "$py" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)' >/dev/null 2>&1; then
+       "$py" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' >/dev/null 2>&1; then
       echo "$py"; return 0
     fi
   done
@@ -26,7 +26,7 @@ if [ -x "$VENV/bin/python" ]; then
 elif [ -x "$VENV/Scripts/python.exe" ]; then            # Windows (Git Bash)
   PY="$VENV/Scripts/python.exe"
 else
-  SYS_PY=$(find_python) || { echo "Python 3.8 or newer is required: https://www.python.org/downloads/" >&2; exit 1; }
+  SYS_PY=$(find_python) || { echo "Python 3.10 or newer is required: https://www.python.org/downloads/" >&2; exit 1; }
   echo "Creating virtual environment in $VENV ..."
   "$SYS_PY" -m venv "$VENV"
   if [ -x "$VENV/bin/python" ]; then PY="$VENV/bin/python"; else PY="$VENV/Scripts/python.exe"; fi

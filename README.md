@@ -49,7 +49,7 @@ other, and from then on it behaves as a single object.
 
 ## Quick start
 
-Requires Python 3.8 or newer. Clone the repository, then run the launcher for your system:
+Requires Python 3.10 or newer. Clone the repository, then run the launcher for your system:
 
 ```bash
 git clone https://github.com/amankprajapati/relabel.git
