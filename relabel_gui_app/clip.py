@@ -38,49 +38,32 @@ def source_json_for(path):
 
 
 def list_source_vias(folder):
-    """*_via.json (preferred) or *.json in a folder, EXCLUDING any .edited.json working files."""
-    vias = [f for f in glob.glob(os.path.join(folder, "*_via.json")) if not is_edited_json(f)]
-    if not vias:
-        vias = [f for f in glob.glob(os.path.join(folder, "*.json")) if not is_edited_json(f)]
-    return vias
+    """The *_via.json files in a folder, excluding .edited.json working files."""
+    return sorted(f for f in glob.glob(os.path.join(folder, "*_via.json")) if not is_edited_json(f))
+
+
+def default_frames_dir(folder):
+    """frames/ next to the JSON (per-clip layout), or images/ (merged-dataset layout)."""
+    frames = os.path.join(folder, "frames")
+    images = os.path.join(folder, "images")
+    return images if not os.path.isdir(frames) and os.path.isdir(images) else frames
 
 
 class Clip:
-    def __init__(self, folder):
-        self.folder = folder
-        # per-clip uses frames/; a merged/shared dataset uses images/ — accept either
-        self.frames_dir = os.path.join(folder, "frames")
-        if not os.path.isdir(self.frames_dir) and os.path.isdir(os.path.join(folder, "images")):
-            self.frames_dir = os.path.join(folder, "images")
-        vias = list_source_vias(folder)
-        self.src_path = os.path.abspath(vias[0])        # ORIGINAL — read-only, never written
-        self.out_path = edited_path_for(self.src_path)  # ALL saves go here
-        # load the edited working file if it exists (resume), else the pristine original
-        load_from = self.out_path if os.path.isfile(self.out_path) else self.src_path
-        self.via = json.load(open(load_from, encoding="utf-8"))
-        self.meta = self.via["_via_img_metadata"]
-
-    @classmethod
-    def from_files(cls, json_path, frames_dir=None):
-        """Open a project from an explicit JSON + frames folder (in-GUI 'Open'). If frames_dir is
-        blank, look for frames/ or images/ next to the JSON."""
-        c = cls.__new__(cls)
+    def __init__(self, json_path, frames_dir=None):
+        """A project: one VIA JSON plus its frames folder (default: frames/ or images/ beside it).
+        json_path may be the original or its .edited.json; saves always go to the .edited.json."""
         given = os.path.abspath(json_path)
-        c.src_path = os.path.abspath(source_json_for(given))   # ORIGINAL — read-only
-        c.out_path = edited_path_for(c.src_path)                # ALL saves go here
-        c.folder = os.path.dirname(c.src_path)
-        if frames_dir:
-            c.frames_dir = os.path.abspath(frames_dir)
-        else:
-            c.frames_dir = os.path.join(c.folder, "frames")
-            if not os.path.isdir(c.frames_dir) and os.path.isdir(os.path.join(c.folder, "images")):
-                c.frames_dir = os.path.join(c.folder, "images")
-        # if the user opened the .edited.json directly, load that; else resume from it when present
+        self.src_path = os.path.abspath(source_json_for(given))   # ORIGINAL - read-only, never written
+        self.out_path = edited_path_for(self.src_path)            # ALL saves go here
+        self.folder = os.path.dirname(self.src_path)
+        self.frames_dir = os.path.abspath(frames_dir) if frames_dir else default_frames_dir(self.folder)
+        # opened the .edited.json directly: load it; otherwise resume from it when it exists
         load_from = given if is_edited_json(given) else (
-            c.out_path if os.path.isfile(c.out_path) else c.src_path)
-        c.via = json.load(open(load_from, encoding="utf-8"))
-        c.meta = c.via["_via_img_metadata"]
-        return c
+            self.out_path if os.path.isfile(self.out_path) else self.src_path)
+        with open(load_from, encoding="utf-8") as fh:
+            self.via = json.load(fh)
+        self.meta = self.via["_via_img_metadata"]
 
     def clipdata(self):
         tracks = {}
@@ -164,12 +147,16 @@ class Clip:
 
 
 def discover(root):
-    """Build {name: Clip} from a clip folder OR a parent of many clip folders."""
-    if glob.glob(os.path.join(root, "*_via.json")):
-        return {os.path.basename(os.path.normpath(root)): Clip(root)}   # normpath: works with \ too
+    """{name: Clip} for a project folder or a parent of several project folders. A folder may hold
+    several *_via.json files sharing one frames folder; each becomes its own project."""
+    folders = [root] if list_source_vias(root) else [
+        d for d in sorted(glob.glob(os.path.join(root, "*")))
+        if os.path.isdir(d) and list_source_vias(d) and os.path.isdir(default_frames_dir(d))]
     clips = {}
-    for d in sorted(glob.glob(os.path.join(root, "*"))):
-        if os.path.isdir(d) and glob.glob(os.path.join(d, "*_via.json")) \
-                and (os.path.isdir(os.path.join(d, "frames")) or os.path.isdir(os.path.join(d, "images"))):
-            clips[os.path.basename(d)] = Clip(d)
+    for folder in folders:
+        vias = list_source_vias(folder)
+        base = os.path.basename(os.path.normpath(folder))           # normpath: works with \ too
+        for via in vias:
+            stem = os.path.basename(via)[:-len("_via.json")]
+            clips[base if len(vias) == 1 else f"{base}/{stem}"] = Clip(via)
     return clips

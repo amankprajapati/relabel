@@ -60,10 +60,12 @@ run.bat --demo                  # Windows (or double-click run.bat)
 
 The first run creates a local `.venv` and installs the tracker's dependencies (`numpy`, `scipy`).
 Every later run finds them already installed, skips the download and starts straight away.
-`--demo` generates two small demo projects (once) and opens them in your browser:
+`--demo` opens the bundled example: 60 real frames of a busy Toronto street crossing with people,
+cars and trucks, boxed by a YOLOX detector. Pick it from the project list in two versions:
 
-- **tracked**: objects that already have track ids. Try changing classes, merging ids and editing boxes.
-- **detections**: raw detector-style boxes with scores but no ids. Press **Track** to link them.
+- **crossing/detections**: raw detector boxes with scores but no ids. Press **Track** to link them.
+- **crossing/tracked**: already tracked, with the detector's mistakes left in (the grey pickup is
+  labelled `car`). Try fixing classes, merging ids and editing boxes.
 
 To open your own data, pass its folder, plus any of the options below:
 
@@ -83,7 +85,7 @@ python -m relabel_gui_app [FOLDER] [--port 8001] [--host 127.0.0.1]
 
 | Option | Meaning |
 | --- | --- |
-| `FOLDER` | A project folder (`*_via.json` + `frames/` or `images/`), or a parent folder containing several. |
+| `FOLDER` | A project folder (`*_via.json` + `frames/` or `images/`), or a parent folder containing several. A folder with several `*_via.json` files opens each as its own project. |
 | `--classes` | Extra classes to offer: `car,person,bicycle`, or a text file with one class per line. |
 | `--compare` | A second JSON (the original) to diff the project against on startup. |
 | `--port`, `--host` | Where to serve the app. The default only listens on this machine. |
@@ -165,7 +167,8 @@ relabel_gui_app/
   render.py      builds the page from web/ and fills in the placeholders
   utils.py       natural sort
   web/           index.html, style.css, app.js: the whole user interface
-make_sample.py   synthetic demo projects
+examples/        bundled real-footage example (CC0 video, see examples/crossing/README.md)
+tools/           build_example.py: rebuilds the example from the video with a detector
 run.sh, run.bat  set up .venv on first run (skipped afterwards) and launch
 requirements.txt numpy + scipy, used only by the tracker
 tests/           tracker tests:  python -m unittest discover tests

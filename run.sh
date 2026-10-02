@@ -2,7 +2,7 @@
 # Set up (once) and launch Relabel.
 #
 #   ./run.sh [FOLDER] [options]     open a project folder (same options as python -m relabel_gui_app)
-#   ./run.sh --demo                 generate demo projects (first time only) and open them
+#   ./run.sh --demo                 open the bundled street-crossing example
 #
 # First run: creates .venv and installs numpy + scipy (used by the tracker).
 # Later runs: finds everything already installed and starts straight away.
@@ -41,11 +41,7 @@ fi
 
 if [ "${1:-}" = "--demo" ]; then
   shift
-  if [ ! -d samples/tracked ]; then
-    "$PY" make_sample.py samples/tracked
-    "$PY" make_sample.py samples/detections --detections
-  fi
-  set -- samples "$@"
+  set -- examples "$@"
 fi
 
 exec "$PY" -m relabel_gui_app "$@"

@@ -99,7 +99,7 @@ def make_handler(clips, default_classes=()):
                     ja = (b.get("compare_json") or "").strip()
                     if not jb or not os.path.isfile(jb):
                         raise ValueError(f"JSON not found: {jb or '(blank)'}")
-                    clip = Clip.from_files(jb, fr)
+                    clip = Clip(jb, fr)
                     if not os.path.isdir(clip.frames_dir):
                         raise ValueError(f"frames folder not found: {clip.frames_dir}")
                     rep = None

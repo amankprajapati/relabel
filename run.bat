@@ -1,7 +1,7 @@
 @echo off
 rem Set up (once) and launch Relabel on Windows. Double-click, or:
 rem   run.bat [FOLDER] [options]     open a project folder
-rem   run.bat --demo                 generate demo projects (first time only) and open them
+rem   run.bat --demo                 open the bundled street-crossing example
 setlocal
 cd /d "%~dp0"
 set "PY=.venv\Scripts\python.exe"
@@ -31,11 +31,7 @@ if errorlevel 1 (
 )
 
 if /i "%~1"=="--demo" (
-  if not exist samples\tracked (
-    "%PY%" make_sample.py samples\tracked
-    "%PY%" make_sample.py samples\detections --detections
-  )
-  "%PY%" -m relabel_gui_app samples
+  "%PY%" -m relabel_gui_app examples
 ) else (
   "%PY%" -m relabel_gui_app %*
 )
