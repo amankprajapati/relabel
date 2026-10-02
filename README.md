@@ -35,6 +35,9 @@ other, and from then on it behaves as a single object.
   and every frame of that track updates.
 - **Tracking built in.** Link raw detections, or boxes you drew yourself, into tracks with ByteTrack.
   Each track gets the majority class of its boxes, which also cleans up class flicker between frames.
+- **Ask AI.** Not sure what a box is? Select it and press <kbd>A</kbd>: Claude (API or Claude Code) or
+  OpenAI Codex names the class from your list with a one-line reason, and **Apply** relabels the
+  whole track. No screenshots or copy-pasting into a chat.
 - **Fix track ids.** Merge two ids into one, or delete an object on one frame or on all frames.
 - **Annotate like VIA.** Drag on the image to draw a box, click to select, drag to move, pull a corner
   to resize. Copy a box and paste it onto frames where it is missing: it keeps its track id.
@@ -128,6 +131,25 @@ The whole run is a single undo step.
 
 ![Tracker dialog](docs/tracker.png)
 
+## Ask AI
+
+Select a box and press **Ask AI** (or <kbd>A</kbd>). The browser crops the box with some margin,
+plus a small copy of the whole frame with the box outlined, and the local server asks the AI you
+picked to choose one class from your list. The answer appears in the *Selected* card as the class
+and a one-line reason; **Apply** sets that class on every frame of the track. Nothing changes
+until you press it.
+
+| Advisor | What it uses | Setup |
+| --- | --- | --- |
+| Claude API | The `anthropic` SDK (installed by the launchers) | Set `ANTHROPIC_API_KEY`, or run `ant auth login`. Optional: `RELABEL_CLAUDE_MODEL` (default `claude-opus-5`). |
+| Claude Code | Your installed `claude` CLI and its login, no API key | Install Claude Code and log in. |
+| OpenAI Codex | Your installed `codex` CLI and its login, no API key | Install the Codex CLI and run `codex login`. |
+
+The advisor list shows which ones are ready; restart Relabel after setting one up. For the Claude
+API, answers are constrained to your class names, and if the model declines a request it is
+retried on Anthropic's recommended fallback model. Images are sent only to the advisor you choose,
+and only when you ask.
+
 ## Keyboard
 
 Mouse: drag on an empty part of the image to draw a box (<kbd>Ctrl</kbd>+drag to start on top of
@@ -142,6 +164,7 @@ reach a box behind another, scroll to zoom.
 | <kbd>Space</kbd> | Play / pause |
 | <kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd> | Select the next / previous box on this frame |
 | <kbd>1</kbd>-<kbd>9</kbd> | Set the selected object's class on every frame (nothing selected: the class for new boxes) |
+| <kbd>A</kbd> | Ask AI which class the selected box is |
 | <kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>Ctrl</kbd>+<kbd>V</kbd> | Copy the selected box / paste it on this frame with the same track id |
 | <kbd>Ctrl</kbd>+arrows | Nudge the selected box 1 px (<kbd>Shift</kbd> for 10 px) |
 | <kbd>Del</kbd> / <kbd>Shift</kbd>+<kbd>Del</kbd> | Delete the selected box on this frame / on every frame |
@@ -162,6 +185,7 @@ relabel_gui_app/
   clip.py        project model: load a VIA file, serve frames and boxes, save to .edited.json
   classdefs.py   where the class list comes from (project file, used classes, --classes)
   tracker.py     ByteTrack-style tracker (numpy)
+  advisors/      Ask AI: shared prompt and parser, Claude API / Claude Code / Codex adapters, registry
   compare.py     two-file compare: load the "before" file and check the pair is compatible
   fsbrowse.py    directory browser for the Open dialog (handles Windows drives)
   render.py      builds the page from web/ and fills in the placeholders
@@ -171,7 +195,7 @@ examples/        bundled real-footage example (CC0 video, see examples/crossing/
 tools/           build_example.py: rebuilds the example from the video with a detector
 run.sh, run.bat  set up .venv on first run (skipped afterwards) and launch
 requirements.txt numpy + scipy, used only by the tracker
-tests/           tracker tests:  python -m unittest discover tests
+tests/           tracker, advisor and HTTP route tests:  python -m unittest discover tests
 ```
 
 The browser holds the working state and sends only changed frames when it saves. The server never
