@@ -36,7 +36,8 @@ DEFAULT_METHOD = "bytetrack"
 
 
 def describe():
-    return [{"id": k, "label": m["label"], "description": m["description"]} for k, m in METHODS.items()]
+    return [{"id": k, "label": m["label"], "description": m["description"], "rejoin": bool(m.get("rejoin"))}
+            for k, m in METHODS.items()]
 
 
 def run(frames, method=DEFAULT_METHOD, id_prefix="trk#", rejoin_gap=90, **params):

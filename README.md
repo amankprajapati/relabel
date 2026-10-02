@@ -33,7 +33,8 @@ other, and from then on it behaves as a single object.
   You can add, rename, merge, reorder or delete classes in the app, or pass them with `--classes`.
 - **Class per track.** Change an object's class once (click its label, or press <kbd>1</kbd>-<kbd>9</kbd>)
   and every frame of that track updates.
-- **Tracking built in.** Link raw detections, or boxes you drew yourself, into tracks with ByteTrack.
+- **Tracking built in.** Link raw detections, or boxes you drew yourself, into tracks with ByteTrack
+  (fast), OC-SORT (occlusion-robust) or OC-SORT + rejoin (precise).
   Each track gets the majority class of its boxes, which also cleans up class flicker between frames.
 - **Ask AI.** Not sure what a box is? Select it and press <kbd>A</kbd>: Claude (API or Claude Code) or
   OpenAI Codex names the class from your list with a one-line reason, and **Apply** relabels the
@@ -110,26 +111,40 @@ Relabel reads and writes these region attributes:
 Any other attributes on a region are kept as they are. The class list is read from and saved to
 `_via_attributes.region.class.options`. Frames play in natural filename order.
 
-## The tracker
+## Tracking methods
 
-`Track` sends the boxes to the local server, which links them with a ByteTrack-style tracker
-(`relabel_gui_app/tracker.py`):
+`Track` sends the boxes to the local server and links them with the method you pick. All three use
+only the boxes (no images, no GPU, no downloads) and run in well under a second on the example.
 
-1. A constant-velocity Kalman filter predicts where each track's box will be in the next frame.
-2. Confident boxes are matched to live and recently lost tracks by IoU.
-3. Weaker boxes are then matched, with a stricter IoU gate, to tracks still unmatched. This keeps a
-   track alive through partial occlusion instead of dropping it.
-4. Leftover boxes start new tracks. Tracks unseen for *N* frames end.
+| Method | How it works | Use it when |
+| --- | --- | --- |
+| **ByteTrack (fast)** | A Kalman filter predicts each object's next box; confident boxes are matched by overlap first, then weak boxes keep tracks alive through partial occlusion. | Objects move smoothly and you want speed. |
+| **OC-SORT (occlusion-robust)** | Same motion model, but when a lost object is found again the filter is replayed from its real boxes, matches also score movement direction, and unmatched tracks get a second try against their last real box. | Occlusions, crossings and sudden turns. |
+| **OC-SORT + rejoin (precise)** | OC-SORT, then an offline pass over the whole video rejoins tracks broken by gaps longer than the tracker can bridge, checking timing, motion and box size. | You want the fewest broken ids to merge by hand. |
 
-It differs from the original ByteTrack on purpose, because every box here is an annotation to keep
-rather than a detection that may be wrong. Tracks start on their first box, and every box receives
-an id. In a folder holding several videos, frames are grouped by filename with the frame number
-removed, and tracking restarts for each video.
+Measured on synthetic scenes with known identities (`python tools/benchmark_trackers.py`: smooth
+motion, long occlusions, crossings and sharp turns, each clean and with 10% / 30% of boxes missing):
 
-In the dialog you choose whether to track only untracked boxes (existing ids are kept) or to
-re-track everything. You can also set the IoU needed to link boxes, how long a lost track is
-remembered, the confident-score threshold, and whether links must stay within one class.
-The whole run is a single undo step.
+| Method | Ids per real object (1.00 is perfect) | Ids mixing two objects |
+| --- | --- | --- |
+| ByteTrack (fast) | 2.00 | 0.05 |
+| OC-SORT | 1.27 | 0.02 |
+| OC-SORT + rejoin | 1.03 | 0.02 |
+
+On the bundled street footage the same 938 boxes become 70 tracks with ByteTrack, 51 with OC-SORT
+and 48 with rejoin.
+
+The trackers differ from their detector-facing originals on purpose, because every box here is an
+annotation to keep rather than a detection that may be wrong: tracks start on their first box and
+every box receives an id. In a folder holding several videos, frames are grouped by filename with
+the frame number removed, and tracking restarts for each video (the rejoin pass never links across
+videos).
+
+In the dialog you also choose whether to track only untracked boxes (existing ids are kept) or to
+re-track everything, the IoU needed to link boxes, how long a lost track is remembered, the
+confident-score threshold, the longest break the rejoin pass bridges, and whether links must stay
+within one class. Each track's class becomes the majority class of its boxes, and the whole run is
+a single undo step.
 
 ![Tracker dialog](docs/tracker.png)
 
@@ -186,7 +201,7 @@ relabel_gui_app/
   server.py      HTTP routes (standard library http.server)
   clip.py        project model: load a VIA file, serve frames and boxes, save to .edited.json
   classdefs.py   where the class list comes from (project file, used classes, --classes)
-  tracker.py     ByteTrack-style tracker (numpy)
+  trackers/      ByteTrack, OC-SORT and the offline rejoin pass, behind one run() (numpy)
   advisors/      Ask AI: shared prompt and parser, Claude API / Claude Code / Codex adapters, registry
   compare.py     two-file compare: load the "before" file and check the pair is compatible
   fsbrowse.py    directory browser for the Open dialog (handles Windows drives)
@@ -194,7 +209,7 @@ relabel_gui_app/
   utils.py       natural sort
   web/           index.html, style.css, app.js: the whole user interface
 examples/        bundled real-footage example (CC0 video, see examples/crossing/README.md)
-tools/           build_example.py: rebuilds the example from the video with a detector
+tools/           build_example.py rebuilds the example; benchmark_trackers.py compares the trackers
 run.sh, run.bat  set up .venv on first run (skipped afterwards) and launch
 requirements.txt numpy + scipy, used only by the tracker
 tests/           tracker, advisor and HTTP route tests:  python -m unittest discover tests

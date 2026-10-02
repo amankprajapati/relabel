@@ -744,6 +744,21 @@ document.getElementById('clslist').addEventListener('change',e=>{
   if(e.target.classList.contains('cname')) renameClass(+e.target.closest('.crow').dataset.i, e.target.value); });
 
 /* ---- tracker: link boxes into tracks with ByteTrack (runs in the local Python server) ---- */
+let TRACKERS=[];                                       // tracking methods offered by the server
+async function loadTrackers(){
+  let d={methods:[],default:''};
+  try{ d=await (await fetch('/trackers')).json(); }catch(e){}
+  TRACKERS=d.methods||[];
+  const sel=document.getElementById('trkmethod');
+  sel.innerHTML=TRACKERS.map(m=>'<option value="'+esc(m.id)+'">'+esc(m.label)+'</option>').join('');
+  let pref=''; try{ pref=localStorage.getItem('relabel-tracker')||''; }catch(e){}
+  sel.value=TRACKERS.some(m=>m.id===pref)?pref:d.default;
+  trackMethodChanged(); }
+function trackMethodChanged(){ const id=document.getElementById('trkmethod').value;
+  const m=TRACKERS.find(x=>x.id===id); if(!m) return;
+  document.getElementById('trkmdesc').textContent=m.description;
+  document.querySelectorAll('#trackdlg .rejoin').forEach(e=>e.style.display=m.rejoin?'':'none');
+  try{ localStorage.setItem('relabel-tracker',id); }catch(e){} }
 function openTracker(){ document.getElementById('trackdlg').style.display='flex';
   document.getElementById('trkstatus').textContent=''; }
 function closeTracker(){ document.getElementById('trackdlg').style.display='none'; releaseFocus(); }
@@ -762,8 +777,11 @@ async function runTracker(){
   const btn=document.getElementById('trkrun'); btn.disabled=true;
   st.style.color=''; st.textContent='Tracking '+nBoxes+' boxes…';
   let res;
-  try{ res=await (await fetch('/track',{method:'POST',body:JSON.stringify({frames:payload,id_prefix:prefix,
-      params:{match_iou:num('trkiou',0.2), track_buffer:Math.round(num('trkbuf',30)),
+  const method=document.getElementById('trkmethod').value;
+  const mlabel=(TRACKERS.find(m=>m.id===method)||{label:method}).label;
+  st.textContent='Tracking '+nBoxes+' boxes with '+mlabel+'…';
+  try{ res=await (await fetch('/track',{method:'POST',body:JSON.stringify({frames:payload,id_prefix:prefix,method,
+      params:{match_iou:num('trkiou',0.2), track_buffer:Math.round(num('trkbuf',30)), rejoin_gap:Math.round(num('trkgap',90)),
               high_thresh:num('trkhigh',0.5), class_aware:document.getElementById('trkcls').checked}})})).json(); }
   catch(e){ res={ok:false,error:String(e)}; }
   btn.disabled=false;
@@ -775,7 +793,7 @@ async function runTracker(){
   selected=null; invalidateTids(); computeRepIdx(); renderList(); drawBoxes(); showSel(); refresh();
   if(COMPARE) computeDiff();
   closeTracker();
-  toast('Tracked '+nBoxes+' boxes into '+res.tracks+' tracks'+(res.sequences>1?' across '+res.sequences+' sequences':'')+' · Ctrl+Z to undo');
+  toast(mlabel+': '+nBoxes+' boxes into '+res.tracks+' tracks'+(res.sequences>1?' across '+res.sequences+' sequences':'')+' · Ctrl+Z to undo');
 }
 
 // Persist to the EDITED file (never the original). Autosave calls this silently; the Save button
@@ -886,4 +904,5 @@ function applyAI(btn){ if(!selected) return; const c=btn.dataset.cls;
   showAI('ok','<div>Applied <b class=aicls>'+esc(c)+'</b></div>'); }
 
 loadAdvisors();
+loadTrackers();
 if(clip) load(); else openLoader();   // no project preloaded -> show the Open dialog

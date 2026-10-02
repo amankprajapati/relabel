@@ -202,9 +202,12 @@
 
 <div id=trackdlg class=modal style="display:none">
   <div class=dialog>
-    <div class=dlghead><b>Run tracker</b><span class=muted>ByteTrack, running locally</span><span class=spacer></span><button class="btn icon" onclick=closeTracker() aria-label=Close><svg class=i><use href="#i-x"/></svg></button></div>
+    <div class=dlghead><b>Run tracker</b><span class=muted>runs locally on this machine</span><span class=spacer></span><button class="btn icon" onclick=closeTracker() aria-label=Close><svg class=i><use href="#i-x"/></svg></button></div>
     <p class=muted>Links the boxes already in this project across frames so each object gets one track id.
       Each track's class becomes the majority class of its boxes. Boxes are never moved, and the whole run is one Ctrl+Z.</p>
+    <label class=field><span>Method</span>
+      <select id=trkmethod onchange=trackMethodChanged()></select></label>
+    <p id=trkmdesc class="muted small"></p>
     <div class=radios>
       <label><input type=radio name=trkscope value=untracked checked> Only untracked boxes <span class=muted>(keep existing ids)</span></label>
       <label><input type=radio name=trkscope value=all> All boxes <span class=muted>(replace every track id)</span></label>
@@ -213,6 +216,7 @@
       <label for=trkiou>Minimum IoU to link</label><input id=trkiou type=number value=0.2 min=0.05 max=0.95 step=0.05>
       <label for=trkbuf>Keep lost tracks for (frames)</label><input id=trkbuf type=number value=30 min=1 step=1>
       <label for=trkhigh>Confident score threshold</label><input id=trkhigh type=number value=0.5 min=0 max=1 step=0.05>
+      <label for=trkgap class=rejoin>Rejoin breaks up to (frames)</label><input id=trkgap class=rejoin type=number value=90 min=1 step=1>
       <label for=trkcls>Only link boxes of the same class</label><input id=trkcls type=checkbox>
     </div>
     <p class="muted small">Scores are read from a <code>score</code> or <code>confidence</code> attribute on each box. Boxes without one count as fully confident.</p>

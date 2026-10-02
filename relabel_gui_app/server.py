@@ -9,7 +9,8 @@ Routes
   POST /save      -> write edits to the .edited.json            (Clip.save_state)
   POST /validate  -> pre-compare A/B compatibility check        (compare.validate_pair)
   POST /open      -> open a project (single or compare) chosen in the GUI
-  POST /track     -> link boxes into tracks                       (trackers.run)
+  GET  /trackers  -> the tracking methods with labels              (trackers.describe)
+  POST /track     -> link boxes into tracks with the chosen method (trackers.run)
   GET  /advisors  -> AI class advisors and whether each is set up (advisors.AdvisorRegistry)
   POST /suggest   -> ask one advisor which class a box crop is      (Advisor.suggest)
 """
@@ -84,6 +85,8 @@ def make_handler(clips, default_classes=(), advisors=None):
                 self._send(200, "text/html; charset=utf-8", render_index(clips, list(default_classes)).encode())
             elif u.path == "/ls":                     # server-side directory browser
                 self._json(listdir_info(q.get("path", [""])[0]))
+            elif u.path == "/trackers":               # tracking methods for the Track dialog
+                self._json({"methods": trackers.describe(), "default": trackers.DEFAULT_METHOD})
             elif u.path == "/advisors":               # AI class advisors + setup status
                 self._json({"advisors": advisors.describe() if advisors else []})
             elif u.path == "/clips":                  # current project list + compare flag
@@ -111,16 +114,20 @@ def make_handler(clips, default_classes=(), advisors=None):
                 total = clips[c].save_state(body.get("cls", {}), body.get("edits", {}), body.get("classes")) if c in clips else 0
                 print(f"saved [{c}]: {total} regions")
                 self._json({"ok": True, "regions": total})
-            elif p == "/track":                       # ByteTrack over the boxes the client sends
+            elif p == "/track":                       # link the boxes the client sends into tracks
                 b = self._body()
                 prm = b.get("params") or {}
                 kw = {k: float(prm[k]) for k in ("high_thresh", "low_thresh", "match_iou") if k in prm}
                 if "track_buffer" in prm:
                     kw["track_buffer"] = int(prm["track_buffer"])
+                if "rejoin_gap" in prm:
+                    kw["rejoin_gap"] = int(prm["rejoin_gap"])
                 kw["class_aware"] = bool(prm.get("class_aware"))
+                method = str(b.get("method") or trackers.DEFAULT_METHOD)
                 try:
-                    res = trackers.run(b.get("frames") or [], id_prefix=str(b.get("id_prefix") or "trk#"), **kw)
-                    print(f"tracked: {res['tracks']} tracks over {res['sequences']} sequence(s)")
+                    res = trackers.run(b.get("frames") or [], method=method,
+                                       id_prefix=str(b.get("id_prefix") or "trk#"), **kw)
+                    print(f"tracked with {method}: {res['tracks']} tracks over {res['sequences']} sequence(s)")
                     self._json({"ok": True, **res})
                 except Exception as e:
                     self._json({"ok": False, "error": str(e)})
