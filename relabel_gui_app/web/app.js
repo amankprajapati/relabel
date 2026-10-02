@@ -5,7 +5,8 @@ let classesDirty=false;             // class list edited in the Classes dialog, 
 let clip=document.getElementById('clipsel').value;
 let frames=[], cls={}, orig={}, idx=0, selected=null, repIdx={}, edited=new Set();
 let draw=null, newN=0, newU=0, drag=null, numMode=false;
-let boxClip=null, lastNudge=null, playTimer=null;   // copied box, nudge undo coalescing, playback
+let boxClip=null, lastNudge=null, playTimer=null;
+let ADVISORS=[], aiToken=0, aiFor=null;   // Ask AI: advisors from the server, request guard, object shown   // copied box, nudge undo coalescing, playback
 let undoStack=[], redoStack=[];
 let outName='', srcName='';         // non-destructive: saves go to outName; srcName is never written
 let autosaveTimer=null, saving=false, saveAgain=false;   // debounced autosave state
@@ -365,6 +366,7 @@ function pick(tid, jump=true){
 function showSel(){
   const bar=document.getElementById('selbar'); if(!selected){bar.style.display='none';return;}
   bar.style.display='flex'; document.getElementById('selid').textContent=shortid(selected);
+  if(selected!==aiFor) clearAI();
   // don't build the (potentially thousands-long) merge dropdown here — that made every click lag.
   // reset it to just the placeholder and mark it stale; buildIdOpts() fills it on first open.
   document.getElementById('idsel').innerHTML='<option value="">(merge into… )</option>';
@@ -518,7 +520,7 @@ addEventListener('keydown',e=>{
     ArrowLeft:()=>step(-1), ArrowRight:()=>step(1), p:()=>step(-1), n:()=>step(1),
     Home:()=>go(0), End:()=>go(frames.length-1), PageUp:()=>step(-10), PageDown:()=>step(10),
     ' ':togglePlay, Tab:()=>cycleBox(e.shiftKey?-1:1),
-    l:toggleLabels, h:toggleHide, c:openClasses, t:openTracker,
+    l:toggleLabels, h:toggleHide, c:openClasses, t:openTracker, a:askAI,
     Delete:()=>{ if(selected) e.shiftKey?deleteTrack():deleteSelected(); },
     Backspace:()=>{ if(selected) e.shiftKey?deleteTrack():deleteSelected(); },
   };
@@ -791,4 +793,58 @@ document.getElementById('list').addEventListener('click',e=>{
 });
 
 // init LAST — after every top-level `let` is initialized, so openLoader() can safely read loaderMode
+/* ---- Ask AI: which class is the selected box? (the server forwards to the chosen advisor) ---- */
+async function loadAdvisors(){
+  try{ ADVISORS=(await (await fetch('/advisors')).json()).advisors||[]; }catch(e){ ADVISORS=[]; }
+  const sel=document.getElementById('aisel');
+  sel.innerHTML=ADVISORS.map(a=>'<option value="'+esc(a.id)+'">'+esc(a.label)+(a.ready?'':' (not set up)')+'</option>').join('');
+  let pref=''; try{ pref=localStorage.getItem('relabel-advisor')||''; }catch(e){}
+  const pick=ADVISORS.find(a=>a.id===pref)||ADVISORS.find(a=>a.ready)||ADVISORS[0];
+  if(pick) sel.value=pick.id;
+  document.getElementById('aibtn').disabled=!ADVISORS.length; }
+function chooseAdvisor(id){ try{ localStorage.setItem('relabel-advisor',id); }catch(e){}
+  document.getElementById('aisel').blur(); clearAI(); }
+function clearAI(){ aiToken++; aiFor=selected; showAI('',''); }
+function showAI(kind,html){ const o=document.getElementById('aiout'); o.className='aiout'+(kind?' '+kind:''); o.innerHTML=html; }
+// the box with a margin (small boxes upscaled so the model sees detail) + the frame with the box outlined
+function boxImages(){ const im=img(), i=selectedIdx();
+  if(i<0||!im.complete||!im.naturalWidth) return null;
+  const [x,y,w,h]=frames[idx].regions[i].box, W=im.naturalWidth, H=im.naturalHeight;
+  const m=Math.max(16,0.25*Math.max(w,h));
+  const cx=Math.max(0,x-m), cy=Math.max(0,y-m), cw=Math.min(W,x+w+m)-cx, ch=Math.min(H,y+h+m)-cy;
+  const s1=Math.min(4,768/Math.max(cw,ch));
+  const c1=document.createElement('canvas'); c1.width=Math.round(cw*s1); c1.height=Math.round(ch*s1);
+  c1.getContext('2d').drawImage(im,cx,cy,cw,ch,0,0,c1.width,c1.height);
+  const s2=Math.min(1,1024/Math.max(W,H));
+  const c2=document.createElement('canvas'); c2.width=Math.round(W*s2); c2.height=Math.round(H*s2);
+  const g=c2.getContext('2d'); g.drawImage(im,0,0,c2.width,c2.height);
+  g.strokeStyle='#ffd23f'; g.lineWidth=3; g.strokeRect(x*s2,y*s2,w*s2,h*s2);
+  return {crop:c1.toDataURL('image/jpeg',0.9), context:c2.toDataURL('image/jpeg',0.85)}; }
+async function askAI(){
+  if(!selected){ toast('Select a box first'); return; }
+  const adv=ADVISORS.find(a=>a.id===document.getElementById('aisel').value);
+  if(!adv){ showAI('err','No AI advisor is available.'); return; }
+  if(!adv.ready){ showAI('err',esc(adv.label)+' is not set up: '+esc(adv.hint)); return; }
+  const imgs=boxImages();
+  if(!imgs){ showAI('err','The selected object has no box on this frame.'); return; }
+  const tid=selected, token=++aiToken; aiFor=tid;
+  showAI('busy','Asking '+esc(adv.label)+'…');
+  const btn=document.getElementById('aibtn'); btn.disabled=true;
+  let res;
+  try{ res=await (await fetch('/suggest',{method:'POST',body:JSON.stringify(
+        {advisor:adv.id, classes:CLASSES, current:cls[tid]||'', crop:imgs.crop, context:imgs.context})})).json(); }
+  catch(e){ res={ok:false,error:'Could not reach the Relabel server: '+e}; }
+  btn.disabled=false;
+  if(token!==aiToken||tid!==selected) return;          // the user moved on while waiting
+  if(!res.ok){ showAI('err',esc(res.error)); return; }
+  const same=res.class===cls[tid];
+  showAI('ok','<div><b class=aicls>'+esc(res.class)+'</b>'+(same?' <span class=muted>(matches current label)</span>':'')+'</div>'
+    +'<div class=aireason>'+esc(res.reason)+'</div>'
+    +(same?'':res.in_list?'<button class="btn primary small" onclick="applyAI(this)" data-cls="'+esc(res.class)+'">Apply'+(isUntracked(tid)?'':' to all frames')+'</button>'
+      :'<div class=muted>Not in your class list. Add it under Classes to use it.</div>')); }
+function applyAI(btn){ if(!selected) return; const c=btn.dataset.cls;
+  classChange(selected,c); toast(shortid(selected)+' → '+c+(isUntracked(selected)?'':' (all frames)'));
+  showAI('ok','<div>Applied <b class=aicls>'+esc(c)+'</b></div>'); }
+
+loadAdvisors();
 if(clip) load(); else openLoader();   // no project preloaded -> show the Open dialog
