@@ -26,7 +26,7 @@ import numpy as np
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "relabel_gui_app"))
-import tracker  # noqa: E402
+import trackers as tracker  # noqa: E402
 
 VIDEO_URL = ("https://upload.wikimedia.org/wikipedia/commons/transcoded/d/d2/"
              "DiagonalCrosswalkYongeDundas.webm/DiagonalCrosswalkYongeDundas.webm.1080p.vp9.webm")

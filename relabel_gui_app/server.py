@@ -9,7 +9,7 @@ Routes
   POST /save      -> write edits to the .edited.json            (Clip.save_state)
   POST /validate  -> pre-compare A/B compatibility check        (compare.validate_pair)
   POST /open      -> open a project (single or compare) chosen in the GUI
-  POST /track     -> link boxes into tracks with ByteTrack        (tracker.run)
+  POST /track     -> link boxes into tracks                       (trackers.run)
   GET  /advisors  -> AI class advisors and whether each is set up (advisors.AdvisorRegistry)
   POST /suggest   -> ask one advisor which class a box crop is      (Advisor.suggest)
 """
@@ -26,7 +26,7 @@ from clip import Clip
 from compare import COMPARE, clear_compare, load_compare, validate_pair
 from fsbrowse import listdir_info
 from render import render_index
-import tracker
+import trackers
 
 
 MAX_BODY = 25 * 1024 * 1024          # requests carry at most two JPEGs; reject anything larger
@@ -119,7 +119,7 @@ def make_handler(clips, default_classes=(), advisors=None):
                     kw["track_buffer"] = int(prm["track_buffer"])
                 kw["class_aware"] = bool(prm.get("class_aware"))
                 try:
-                    res = tracker.run(b.get("frames") or [], id_prefix=str(b.get("id_prefix") or "trk#"), **kw)
+                    res = trackers.run(b.get("frames") or [], id_prefix=str(b.get("id_prefix") or "trk#"), **kw)
                     print(f"tracked: {res['tracks']} tracks over {res['sequences']} sequence(s)")
                     self._json({"ok": True, **res})
                 except Exception as e:

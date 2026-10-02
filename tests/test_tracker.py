@@ -5,7 +5,7 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "relabel_gui_app"))
-import tracker  # noqa: E402
+import trackers as tracker  # noqa: E402
 
 # (true id, class, x0, y0, size, dx, dy)
 OBJECTS = [("a", "car", 20, 60, 70, 12, 1), ("b", "person", 560, 220, 40, -9, -1),
