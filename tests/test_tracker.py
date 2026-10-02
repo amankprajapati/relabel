@@ -6,6 +6,7 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "relabel_gui_app"))
 import trackers as tracker  # noqa: E402
+import scenes  # noqa: E402  (tests/ is on sys.path under unittest discover)
 
 # (true id, class, x0, y0, size, dx, dy)
 OBJECTS = [("a", "car", 20, 60, 70, 12, 1), ("b", "person", 560, 220, 40, -9, -1),
@@ -83,3 +84,44 @@ class TrackerTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+
+class MethodsTest(unittest.TestCase):
+    def test_registry_lists_every_method_with_a_label(self):
+        ids = [m["id"] for m in tracker.describe()]
+        self.assertEqual(ids, ["bytetrack", "ocsort", "ocsort-rejoin"])
+        self.assertTrue(all(m["label"] and m["description"] for m in tracker.describe()))
+        with self.assertRaises(ValueError):
+            tracker.run([], method="nope")
+
+    def test_every_method_tracks_a_clean_scene_perfectly(self):
+        frames, truth = scenes.make("smooth")
+        for m in ("bytetrack", "ocsort", "ocsort-rejoin"):
+            s = scenes.score(tracker.run(frames, method=m), truth)
+            self.assertEqual((s["ids_per_object"], s["wrong_merges"]), (1.0, 0), m)
+
+    def test_rejoin_bridges_an_occlusion_longer_than_the_track_buffer(self):
+        frames, truth = scenes.make("long occlusion")
+        online = scenes.score(tracker.run(frames, method="ocsort"), truth)
+        rejoined = scenes.score(tracker.run(frames, method="ocsort-rejoin"), truth)
+        self.assertGreater(online["ids_per_object"], 1.0)        # the online tracker gave up
+        self.assertEqual((rejoined["ids_per_object"], rejoined["wrong_merges"]), (1.0, 0))
+
+    def test_rejoin_never_links_across_videos(self):
+        f1, _ = scenes.make("long occlusion", prefix="videoA")
+        f2, _ = scenes.make("long occlusion", prefix="videoB")
+        res = tracker.run(f1 + f2, method="ocsort-rejoin")
+        n = len(f1)
+        self.assertFalse({t for r in res["ids"][:n] for t in r} & {t for r in res["ids"][n:] for t in r})
+
+    def test_ocsort_keeps_ids_through_sharp_turns_better_than_bytetrack(self):
+        frames, truth = scenes.make("turns", drop=0.1, weak_scores=True)
+        byte = scenes.score(tracker.run(frames, method="bytetrack"), truth)
+        oc = scenes.score(tracker.run(frames, method="ocsort"), truth)
+        self.assertLess(oc["ids_per_object"], byte["ids_per_object"])
+
+    def test_people_crossing_keep_their_own_ids(self):
+        frames, truth = scenes.make("crossing")
+        for m in ("bytetrack", "ocsort", "ocsort-rejoin"):
+            self.assertEqual(scenes.score(tracker.run(frames, method=m), truth)["wrong_merges"], 0, m)
